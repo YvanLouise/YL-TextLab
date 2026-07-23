@@ -69,13 +69,13 @@ export function HomePage() {
               </p>
             </div>
             <div className={styles.heroMedia} aria-hidden="true">
-              <img src="/assets/hero-replace.png" alt="" />
+              <img src={`${import.meta.env.BASE_URL}assets/hero-replace.png`} alt="" />
             </div>
             <div className={styles.heroActions}>
               <Link className="button button-primary" to="/replace">
                 开始使用 <ArrowRight size={17} aria-hidden="true" />
               </Link>
-              <Link className="button" to="/#features">
+              <Link className="button" to="/features">
                 查看功能
               </Link>
             </div>

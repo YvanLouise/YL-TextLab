@@ -28,6 +28,8 @@ test('draft persists and clear removes it', async ({ page }) => {
 test('help, changelog and mobile navigation are usable', async ({ page, isMobile }) => {
   await page.goto('/help')
   await expect(page.getByRole('heading', { name: '使用帮助', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '关于作者' })).toBeVisible()
+  await expect(page.getByText('YvanLouise')).toBeVisible()
   await page.getByText('替换结果可以编辑吗？').click()
   await expect(page.getByText(/结果区继续修改后复制/)).toBeVisible()
   await page.goto('/changelog')
@@ -37,6 +39,24 @@ test('help, changelog and mobile navigation are usable', async ({ page, isMobile
   if (isMobile) {
     await page.goto('/')
     await page.getByRole('button', { name: '打开导航菜单' }).click()
-    await expect(page.getByRole('navigation', { name: '移动端导航' })).toBeVisible()
+    const mobileNavigation = page.getByRole('navigation', { name: '移动端导航' })
+    await expect(mobileNavigation).toBeVisible()
+    await expect.poll(async () => (await mobileNavigation.boundingBox())?.height).toBe(
+      page.viewportSize()?.height,
+    )
+    await expect(page.locator('body')).toHaveCSS('overflow', 'hidden')
+    await page.getByRole('button', { name: '关闭导航菜单' }).press('Escape')
+    await expect(mobileNavigation).toBeHidden()
   }
+})
+
+test('features page explains the live tool and removes duplicate closing sections', async ({ page }) => {
+  await page.goto('/features')
+  await expect(page.getByRole('heading', { name: '功能详情' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: '关键词替换', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '匹配规则一览' })).toBeVisible()
+  await expect(page.getByText('敬请期待', { exact: true })).toHaveCount(3)
+  await expect(page.getByRole('link', { name: '文本清理' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: '更多功能，敬请期待' })).toHaveCount(0)
+  await expect(page.getByText(/文本仅保存在本机浏览器/)).toHaveCount(0)
 })

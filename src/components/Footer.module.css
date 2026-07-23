@@ -4,3 +4,10 @@
   font-size: 13px;
   text-align: center;
 }
+
+@media (max-width: 620px) {
+  .footer {
+    padding: 8px 14px 9px;
+    font-size: 9px;
+  }
+}

@@ -26,7 +26,11 @@ export function ChangelogPage() {
                 <p>记录 YL 文本处理功能的版本变化与改进</p>
               </div>
             </div>
-            <img src="/assets/changelog-illustration.png" alt="" aria-hidden="true" />
+            <img
+              src={`${import.meta.env.BASE_URL}assets/changelog-illustration.png`}
+              alt=""
+              aria-hidden="true"
+            />
           </div>
         </header>
 

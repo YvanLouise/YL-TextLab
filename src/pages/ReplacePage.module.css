@@ -407,19 +407,92 @@
 @media (max-width: 760px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
-    padding-block: 18px 26px;
+    gap: 8px;
+    padding-block: 8px 12px;
   }
 
   .settings {
     grid-column: auto;
     display: block;
-    padding: 22px 18px;
+    padding: 8px 12px;
+  }
+
+  .panel {
+    border-radius: 12px;
+  }
+
+  .settings h1 {
+    margin-bottom: 4px;
+    font-size: 15px;
+  }
+
+  .fieldGroup {
+    gap: 3px;
+    margin-bottom: 6px;
+  }
+
+  .fieldGroup label {
+    font-size: 11px;
+  }
+
+  .fieldGroup input {
+    height: 25px;
+    padding-inline: 10px;
+    border-radius: 7px;
+    font-size: 11px;
   }
 
   .options {
     display: grid;
     grid-template-columns: 1fr;
+    gap: 2px;
+    padding-top: 2px;
+    margin-bottom: 6px;
+  }
+
+  .optionRow {
+    min-height: 16px;
+  }
+
+  .optionRow label {
+    gap: 7px;
+    font-size: 11px;
+  }
+
+  .checkbox {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+  }
+
+  .helpButton {
+    width: 16px;
+    height: 16px;
+  }
+
+  .helpButton svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .settings .execute {
+    min-height: 34px;
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+
+  .secondaryActions {
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .secondaryActions :global(.button) {
+    min-height: 32px;
+    font-size: 11px;
+  }
+
+  .settingSummary {
+    display: none;
   }
 
   .flowArrow {
@@ -427,14 +500,63 @@
   }
 
   .editorPanel {
-    padding: 21px 16px 16px;
+    padding: 12px 12px 11px;
+  }
+
+  .panelHeading {
+    min-height: 30px;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .panelHeading h2 {
+    font-size: 17px;
+  }
+
+  .panelHeading > span {
+    font-size: 11px;
+  }
+
+  .resultTitle {
+    gap: 7px;
+  }
+
+  .replacedBadge {
+    padding: 3px 7px;
+    font-size: 10px;
+  }
+
+  .copyButton {
+    min-height: 30px;
+    gap: 5px;
+    padding-inline: 9px;
+    border-radius: 7px;
+    font-size: 11px;
+  }
+
+  .copyButton svg {
+    width: 15px;
+    height: 15px;
   }
 
   .statusBar {
     grid-column: auto;
     align-items: stretch;
     flex-direction: column;
-    padding: 18px;
+    gap: 1px;
+    min-height: 0;
+    padding: 4px 10px;
+    border-radius: 12px;
+  }
+
+  .statusMessage {
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .statusMessage svg {
+    width: 18px;
+    height: 18px;
   }
 
   .statusBar dl {
@@ -444,7 +566,7 @@
 
   .statusBar dl > div {
     min-width: 0;
-    padding-inline: 10px;
+    padding-inline: 6px;
   }
 
   .statusBar dl > div:first-child {
@@ -454,6 +576,15 @@
   .storageWarning {
     grid-column: auto;
   }
+
+  .statusBar dt {
+    font-size: 9px;
+  }
+
+  .statusBar dd {
+    margin-top: 2px;
+    font-size: 13px;
+  }
 }
 
 @media (max-width: 430px) {
@@ -462,14 +593,14 @@
   }
 
   .panelHeading {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .resultTitle {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .statusBar dd {
-    font-size: 16px;
+    font-size: 13px;
   }
 }

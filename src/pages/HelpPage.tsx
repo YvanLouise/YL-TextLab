@@ -14,6 +14,7 @@ import {
   Settings2,
   ShieldCheck,
   Trash2,
+  UserRound,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Footer } from '../components/Footer'
@@ -81,6 +82,7 @@ export function HelpPage() {
           <a href="#matching">匹配选项说明</a>
           <a href="#privacy">数据与草稿</a>
           <a href="#faq">常见问题</a>
+          <a href="#about-author">关于作者</a>
           <div className={styles.sideTip}>
             <ShieldCheck aria-hidden="true" />
             <strong>小贴士</strong>
@@ -94,7 +96,11 @@ export function HelpPage() {
               <h1>使用帮助</h1>
               <p>快速了解关键词替换工具的使用方法、匹配规则和本机草稿机制。</p>
             </div>
-            <img src="/assets/help-illustration.png" alt="" aria-hidden="true" />
+            <img
+              src={`${import.meta.env.BASE_URL}assets/help-illustration.png`}
+              alt=""
+              aria-hidden="true"
+            />
           </header>
 
           <section id="quick-start" className={styles.section}>
@@ -166,6 +172,20 @@ export function HelpPage() {
                 </details>
               ))}
             </div>
+          </section>
+
+          <section id="about-author" className={styles.section}>
+            <h2>关于作者</h2>
+            <article className={styles.authorCard}>
+              <span className={styles.authorIcon}>
+                <UserRound aria-hidden="true" />
+              </span>
+              <div>
+                <p>作者</p>
+                <h3>YvanLouise</h3>
+                <span>YL文本处理工具的设计与开发者</span>
+              </div>
+            </article>
           </section>
 
           <section className={styles.ctaBand}>
