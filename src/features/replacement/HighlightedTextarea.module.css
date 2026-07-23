@@ -1,0 +1,101 @@
+.editor {
+  display: grid;
+  min-height: 500px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.backdrop,
+.textarea {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-height: 500px;
+  padding: 22px;
+  margin: 0;
+  border: 0;
+  overflow: auto;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1.95;
+  letter-spacing: 0.01em;
+  tab-size: 4;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.backdrop {
+  z-index: 0;
+  color: var(--text-strong);
+  pointer-events: none;
+}
+
+.textarea {
+  z-index: 1;
+  resize: vertical;
+  background: transparent;
+  caret-color: var(--text-strong);
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.textarea::placeholder {
+  color: var(--text-muted);
+  -webkit-text-fill-color: var(--text-muted);
+}
+
+.textarea::selection {
+  background: rgb(96 153 255 / 26%);
+  -webkit-text-fill-color: transparent;
+}
+
+.sourceMark,
+.resultMark {
+  padding: 1px 2px;
+  border-radius: 3px;
+  color: inherit;
+}
+
+.sourceMark {
+  background: #e5f0ff;
+  color: #1762da;
+}
+
+.resultMark {
+  background: #dff5e4;
+  color: #177a39;
+}
+
+:global(:root[data-theme='dark']) .sourceMark {
+  background: #183b70;
+  color: #a8c8ff;
+}
+
+:global(:root[data-theme='dark']) .resultMark {
+  background: #17462a;
+  color: #8be4a7;
+}
+
+@media (max-width: 900px) {
+  .editor,
+  .backdrop,
+  .textarea {
+    min-height: 390px;
+  }
+}
+
+@media (max-width: 600px) {
+  .editor,
+  .backdrop,
+  .textarea {
+    min-height: 350px;
+  }
+
+  .backdrop,
+  .textarea {
+    padding: 17px;
+    font-size: 15px;
+    line-height: 1.85;
+  }
+}

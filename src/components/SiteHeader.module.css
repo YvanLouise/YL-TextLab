@@ -1,0 +1,178 @@
+.header {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  border-bottom: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: 0 2px 12px rgb(22 45 84 / 5%);
+  backdrop-filter: blur(16px);
+}
+
+.toolHeader {
+  position: relative;
+}
+
+.inner {
+  display: flex;
+  height: 66px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.desktopNav {
+  display: flex;
+  align-self: stretch;
+  gap: 22px;
+}
+
+.navLink {
+  position: relative;
+  display: flex;
+  min-width: 70px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 520;
+  text-decoration: none;
+}
+
+.navLink::after {
+  position: absolute;
+  right: 10px;
+  bottom: 0;
+  left: 10px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--primary);
+  content: '';
+  opacity: 0;
+  transform: scaleX(0.5);
+  transition: opacity var(--motion-fast), transform var(--motion-fast);
+}
+
+.navLink:hover,
+.active {
+  color: var(--primary);
+}
+
+.active::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.actions,
+.toolBranding {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.menuButton {
+  display: none;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-strong);
+  cursor: pointer;
+}
+
+.menuButton:hover {
+  background: var(--surface-muted);
+}
+
+.menuButton svg {
+  width: 24px;
+  height: 24px;
+}
+
+.mobileLayer {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(6 18 38 / 38%);
+}
+
+.mobileNav {
+  display: flex;
+  width: min(86vw, 340px);
+  min-height: 100%;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  background: var(--surface);
+  box-shadow: -14px 0 40px rgb(6 18 38 / 20%);
+}
+
+.mobileTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.mobileTop .menuButton {
+  display: grid;
+}
+
+.mobileLink {
+  padding: 13px 14px;
+  border-radius: 10px;
+  color: var(--text-strong);
+  font-weight: 620;
+  text-decoration: none;
+}
+
+.mobileLink:hover {
+  background: var(--surface-muted);
+  color: var(--primary);
+}
+
+.divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+}
+
+.toolName {
+  color: var(--text-muted);
+  font-size: 15px;
+}
+
+@media (max-width: 820px) {
+  .desktopNav,
+  .actions > :global(.button) {
+    display: none;
+  }
+
+  .menuButton {
+    display: grid;
+  }
+}
+
+@media (max-width: 560px) {
+  .inner {
+    height: 62px;
+  }
+
+  .toolBranding {
+    min-width: 0;
+    gap: 9px;
+  }
+
+  .divider {
+    display: none;
+  }
+
+  .toolName {
+    overflow: hidden;
+    max-width: 130px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

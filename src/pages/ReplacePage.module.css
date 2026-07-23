@@ -1,0 +1,475 @@
+.page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 50% -10%, rgb(102 157 255 / 10%), transparent 30%),
+    var(--page-cool);
+}
+
+.workspace {
+  position: relative;
+  display: grid;
+  grid-template-columns: 286px minmax(0, 1fr) 52px minmax(0, 1fr);
+  gap: 20px;
+  min-width: 0;
+  padding-block: 28px;
+}
+
+.panel {
+  min-width: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.settings {
+  padding: 26px 22px;
+}
+
+.settings h1 {
+  margin-bottom: 25px;
+  color: var(--text-strong);
+  font-size: 21px;
+  letter-spacing: -0.02em;
+}
+
+.fieldGroup {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.fieldGroup label {
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 640;
+}
+
+.fieldGroup input {
+  width: 100%;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text-strong);
+  font-size: 15px;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
+}
+
+.fieldGroup input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.fieldGroup input[aria-invalid='true'] {
+  border-color: #d94747;
+}
+
+.error,
+.editorError {
+  color: #cf3f3f;
+  font-size: 12px;
+}
+
+.options {
+  display: grid;
+  gap: 13px;
+  padding: 6px 0 0;
+  margin: 0 0 22px;
+  border: 0;
+}
+
+.optionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.optionRow label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-strong);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.optionRow input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.checkbox {
+  position: relative;
+  display: grid;
+  width: 21px;
+  height: 21px;
+  place-items: center;
+  border: 1.5px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  transition: border-color var(--motion-fast), background var(--motion-fast);
+}
+
+.optionRow input:checked + .checkbox {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.optionRow input:checked + .checkbox::after {
+  width: 7px;
+  height: 11px;
+  border-right: 2px solid white;
+  border-bottom: 2px solid white;
+  content: '';
+  transform: translateY(-1px) rotate(45deg);
+}
+
+.optionRow input:focus-visible + .checkbox {
+  outline: 3px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  outline-offset: 2px;
+}
+
+.helpButton {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: help;
+}
+
+.helpButton:hover {
+  background: var(--surface-muted);
+  color: var(--primary);
+}
+
+.helpButton svg {
+  width: 17px;
+  height: 17px;
+}
+
+.execute {
+  width: 100%;
+}
+
+.execute svg,
+.secondaryActions svg,
+.copyButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+.secondaryActions {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.secondaryActions :global(.button) {
+  min-height: 43px;
+  padding-inline: 10px;
+  font-size: 14px;
+}
+
+.settingSummary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 24px;
+  padding: 18px 15px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--surface-blue), var(--surface));
+}
+
+.summaryIcon {
+  display: grid;
+  width: 55px;
+  height: 55px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #d8e7ff;
+  color: var(--primary);
+}
+
+:global(:root[data-theme='dark']) .summaryIcon {
+  background: #193b70;
+}
+
+.summaryIcon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.settingSummary p {
+  margin: 0 0 6px;
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.settingSummary p:last-child {
+  margin: 0;
+}
+
+.settingSummary strong {
+  margin-left: 5px;
+  color: var(--primary);
+  font-size: 15px;
+}
+
+.settingSummary .ready {
+  color: var(--success);
+}
+
+.editorPanel {
+  min-width: 0;
+  padding: 26px 20px 20px;
+}
+
+.panelHeading {
+  display: flex;
+  min-height: 42px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.panelHeading h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 21px;
+  letter-spacing: -0.02em;
+}
+
+.panelHeading > span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.resultTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.replacedBadge {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.copyButton {
+  display: inline-flex;
+  min-height: 39px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--primary-border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.copyButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.editorError {
+  display: block;
+  margin-top: 8px;
+}
+
+.flowArrow {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  align-self: center;
+  place-items: center;
+  border: 1px solid var(--border-soft);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--primary);
+  transform: rotate(90deg);
+}
+
+.flowArrow svg {
+  width: 24px;
+  height: 24px;
+}
+
+.statusBar {
+  grid-column: 1 / -1;
+  display: flex;
+  min-height: 82px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 24px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.statusMessage {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-strong);
+  font-size: 14px;
+}
+
+.statusMessage svg {
+  width: 24px;
+  height: 24px;
+  color: var(--success);
+}
+
+.statusBar dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(115px, 1fr));
+  gap: 0;
+  margin: 0;
+}
+
+.statusBar dl > div {
+  min-width: 140px;
+  padding-inline: 24px;
+  border-left: 1px solid var(--border);
+  text-align: center;
+}
+
+.statusBar dt {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.statusBar dd {
+  margin: 4px 0 0;
+  color: var(--primary);
+  font-size: 18px;
+  font-weight: 750;
+}
+
+.storageWarning {
+  grid-column: 1 / -1;
+  margin: -8px 0 0;
+  color: var(--warning);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 1180px) {
+  .workspace {
+    grid-template-columns: 1fr 52px 1fr;
+  }
+
+  .settings {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 24px;
+  }
+
+  .settings h1,
+  .options,
+  .settingSummary {
+    grid-column: 1 / -1;
+  }
+
+  .options {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .settingSummary {
+    margin-top: 18px;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding-block: 18px 26px;
+  }
+
+  .settings {
+    grid-column: auto;
+    display: block;
+    padding: 22px 18px;
+  }
+
+  .options {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .flowArrow {
+    display: none;
+  }
+
+  .editorPanel {
+    padding: 21px 16px 16px;
+  }
+
+  .statusBar {
+    grid-column: auto;
+    align-items: stretch;
+    flex-direction: column;
+    padding: 18px;
+  }
+
+  .statusBar dl {
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .statusBar dl > div {
+    min-width: 0;
+    padding-inline: 10px;
+  }
+
+  .statusBar dl > div:first-child {
+    border-left: 0;
+  }
+
+  .storageWarning {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 430px) {
+  .secondaryActions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .panelHeading {
+    flex-wrap: wrap;
+  }
+
+  .resultTitle {
+    flex-wrap: wrap;
+  }
+
+  .statusBar dd {
+    font-size: 16px;
+  }
+}

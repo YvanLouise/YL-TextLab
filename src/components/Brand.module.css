@@ -1,0 +1,46 @@
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-strong);
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 8px;
+  background: linear-gradient(145deg, #347cff, #1f62ea);
+  box-shadow: 0 8px 18px rgb(40 108 244 / 24%);
+  color: white;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.compactName,
+.name {
+  display: inline;
+}
+
+@media (max-width: 390px) {
+  .brand {
+    gap: 9px;
+    font-size: 16px;
+  }
+
+  .mark {
+    width: 34px;
+    height: 34px;
+  }
+
+  .compactName {
+    display: none;
+  }
+}
