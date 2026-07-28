@@ -443,6 +443,10 @@
   gap: 38px;
 }
 
+.release + .release {
+  margin-top: 30px;
+}
+
 .releaseMeta {
   position: relative;
   display: flex;

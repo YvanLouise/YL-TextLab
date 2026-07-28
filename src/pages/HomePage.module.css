@@ -100,7 +100,7 @@
 
 .featureGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
 
@@ -433,8 +433,15 @@
   }
 
   .featureCard ul,
-  .cardLink {
+  .upcomingCard .cardLink {
     display: none;
+  }
+
+  .activeCard .cardLink {
+    display: inline-flex;
+    margin-left: 40px;
+    padding-top: 5px;
+    font-size: 10px;
   }
 
   .cardTop {

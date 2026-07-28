@@ -3,11 +3,11 @@ import styles from './Brand.module.css'
 
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
-    <Link className={styles.brand} to="/" aria-label="YL 文本处理功能首页">
+    <Link className={styles.brand} to="/" aria-label="YL文件工具箱首页">
       <span className={styles.mark} aria-hidden="true">
         YL
       </span>
-      <span className={compact ? styles.compactName : styles.name}>YL文本处理功能</span>
+      <span className={compact ? styles.compactName : styles.name}>YL文件工具箱</span>
     </Link>
   )
 }

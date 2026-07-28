@@ -205,7 +205,7 @@ export function ReplacePage() {
 
   return (
     <div className={styles.page}>
-      <ToolHeader />
+      <ToolHeader toolName="文本关键词替换工具" />
       <main className={`page-shell ${styles.workspace}`}>
         <section className={`${styles.panel} ${styles.settings}`} aria-labelledby="settings-title">
           <h1 id="settings-title">替换设置</h1>

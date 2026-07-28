@@ -5,8 +5,11 @@ import {
   Check,
   ClipboardList,
   CopyCheck,
+  FileText,
   FileSearch,
+  Images,
   LockKeyhole,
+  Music2,
   RefreshCw,
   ScanText,
   ShieldCheck,
@@ -63,9 +66,9 @@ export function HomePage() {
                 <span>让文本处理更轻松</span>
               </h1>
               <p>
-                YL文本处理功能是一款专注于文本处理的在线工具，
+                YL文件工具箱是一款专注于文件处理的在线工具，
                 <br />
-                现已支持关键词替换，未来将持续扩展更多实用功能。
+                现已支持关键词替换、PDF 查看、图片与音频格式转换，未来将持续扩展更多实用功能。
               </p>
             </div>
             <div className={styles.heroMedia} aria-hidden="true">
@@ -86,7 +89,7 @@ export function HomePage() {
           <div className="page-shell">
             <div className={styles.sectionHeading}>
               <h2 id="features-title">功能概览</h2>
-              <p>目前仅支持关键词替换，更多功能正在开发中，敬请期待！</p>
+              <p>关键词替换、PDF 查看、图片与音频格式转换均已上线，更多功能正在开发中。</p>
             </div>
             <div className={styles.featureGrid}>
               <article className={`${styles.featureCard} ${styles.activeCard}`}>
@@ -108,6 +111,63 @@ export function HomePage() {
                   )}
                 </ul>
                 <Link className={styles.cardLink} to="/replace">
+                  立即使用 <ArrowRight aria-hidden="true" />
+                </Link>
+              </article>
+
+              <article className={`${styles.featureCard} ${styles.activeCard}`}>
+                <div className={styles.cardTop}>
+                  <span className={`${styles.iconBox} ${styles.activeIcon}`}>
+                    <FileText aria-hidden="true" />
+                  </span>
+                  <h3>PDF 查看</h3>
+                  <span className={styles.onlineBadge}>已上线</span>
+                </div>
+                <p>直接在浏览器打开本机 PDF，支持翻页、缩放、旋转与下载原文件。</p>
+                <ul>
+                  {['本机文件直接查看', '翻页与页码跳转', '缩放和适应宽度', '旋转与原文件下载'].map((item) => (
+                    <li key={item}><Check aria-hidden="true" /> {item}</li>
+                  ))}
+                </ul>
+                <Link className={styles.cardLink} to="/pdf">
+                  立即使用 <ArrowRight aria-hidden="true" />
+                </Link>
+              </article>
+
+              <article className={`${styles.featureCard} ${styles.activeCard}`}>
+                <div className={styles.cardTop}>
+                  <span className={`${styles.iconBox} ${styles.activeIcon}`}>
+                    <Images aria-hidden="true" />
+                  </span>
+                  <h3>图片格式转换</h3>
+                  <span className={styles.onlineBadge}>已上线</span>
+                </div>
+                <p>单张或批量转换常用图片、应用图标与游戏纹理格式，全程本地完成。</p>
+                <ul>
+                  {['PNG / JPG / WebP / BMP', 'ICO 单尺寸与多尺寸', 'TGA 与 DDS 游戏格式', '批量转换与 ZIP 下载'].map((item) => (
+                    <li key={item}><Check aria-hidden="true" /> {item}</li>
+                  ))}
+                </ul>
+                <Link className={styles.cardLink} to="/image-convert">
+                  立即使用 <ArrowRight aria-hidden="true" />
+                </Link>
+              </article>
+
+              <article className={`${styles.featureCard} ${styles.activeCard}`}>
+                <div className={styles.cardTop}>
+                  <span className={`${styles.iconBox} ${styles.activeIcon}`}>
+                    <Music2 aria-hidden="true" />
+                  </span>
+                  <h3>音频格式转换</h3>
+                  <span className={styles.onlineBadge}>已上线</span>
+                </div>
+                <p>在浏览器本地转换常用音乐格式，支持质量参数、标签保留与批量下载。</p>
+                <ul>
+                  {['MP3 / WAV / FLAC / M4A', 'AAC / OGG / Opus 输出', '码率、采样率与声道', '批量转换、试听与 ZIP 下载'].map((item) => (
+                    <li key={item}><Check aria-hidden="true" /> {item}</li>
+                  ))}
+                </ul>
+                <Link className={styles.cardLink} to="/audio-convert">
                   立即使用 <ArrowRight aria-hidden="true" />
                 </Link>
               </article>

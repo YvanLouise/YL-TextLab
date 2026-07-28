@@ -8,6 +8,8 @@ import styles from './SiteHeader.module.css'
 const navigation = [
   { label: '首页', to: '/' },
   { label: '功能', to: '/features' },
+  { label: '图片转换', to: '/image-convert' },
+  { label: '音频转换', to: '/audio-convert' },
   { label: '使用帮助', to: '/help' },
   { label: '更新日志', to: '/changelog' },
 ]
@@ -107,7 +109,7 @@ export function SiteHeader() {
   )
 }
 
-export function ToolHeader() {
+export function ToolHeader({ toolName }: { toolName: string }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
 
@@ -133,7 +135,7 @@ export function ToolHeader() {
           <div className={styles.toolBranding}>
             <Brand />
             <span className={styles.divider} aria-hidden="true" />
-            <span className={styles.toolName}>文本关键词替换工具</span>
+            <span className={styles.toolName}>{toolName}</span>
           </div>
           <div className={styles.toolActions}>
             <span className={styles.toolTheme}>

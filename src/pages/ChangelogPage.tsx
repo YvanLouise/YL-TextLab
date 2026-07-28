@@ -23,7 +23,7 @@ export function ChangelogPage() {
               </span>
               <div>
                 <h1>更新日志</h1>
-                <p>记录 YL 文本处理功能的版本变化与改进</p>
+                <p>记录 YL文件工具箱的版本变化与改进</p>
               </div>
             </div>
             <img
@@ -35,6 +35,72 @@ export function ChangelogPage() {
         </header>
 
         <div className={`page-shell ${styles.changelogBody}`}>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}>
+              <span className={styles.timelineDot} />
+              <strong>v1.2.0</strong>
+              <time dateTime="2026-07-29">2026-07-29</time>
+              <span className={styles.releaseBadge}>音频工具</span>
+            </aside>
+            <div className={styles.releaseNotes}>
+              <section>
+                <h2>新增</h2>
+                <ul>
+                  <li><Check /> MP3、WAV、FLAC、M4A、AAC、OGG 与 Opus 输出</li>
+                  <li><Check /> WMA 与 AIFF 输入兼容，以及质量、采样率和声道设置</li>
+                  <li><Check /> 歌曲标签与兼容封面尽力保留</li>
+                </ul>
+              </section>
+              <section>
+                <h2>批量处理</h2>
+                <ul>
+                  <li><Check /> 顺序转换、实时进度、试听和停止转换</li>
+                  <li><Check /> 单项下载与全部结果 ZIP 打包</li>
+                </ul>
+              </section>
+              <section>
+                <h2>隐私</h2>
+                <ul>
+                  <li><Check /> 音频只在浏览器本机转码，不上传服务器</li>
+                  <li><Check /> 转码核心由网站静态托管，音频文件不保存草稿</li>
+                </ul>
+              </section>
+            </div>
+          </article>
+
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}>
+              <span className={styles.timelineDot} />
+              <strong>v1.1.0</strong>
+              <time dateTime="2026-07-28">2026-07-28</time>
+              <span className={styles.releaseBadge}>图片工具</span>
+            </aside>
+            <div className={styles.releaseNotes}>
+              <section>
+                <h2>新增</h2>
+                <ul>
+                  <li><Check /> PNG、JPG、WebP、BMP 单图与批量格式转换</li>
+                  <li><Check /> ICO 单尺寸和多尺寸图标生成</li>
+                  <li><Check /> TGA 与 DDS 游戏素材读取和输出</li>
+                </ul>
+              </section>
+              <section>
+                <h2>批量处理</h2>
+                <ul>
+                  <li><Check /> 拖拽、多选、逐项状态和单独下载</li>
+                  <li><Check /> 一键将全部转换结果打包为 ZIP</li>
+                </ul>
+              </section>
+              <section>
+                <h2>隐私</h2>
+                <ul>
+                  <li><Check /> 图片仅在当前浏览器中处理，不上传服务器</li>
+                  <li><Check /> 不保存图片草稿，关闭页面后自动释放文件</li>
+                </ul>
+              </section>
+            </div>
+          </article>
+
           <article className={styles.release}>
             <aside className={styles.releaseMeta}>
               <span className={styles.timelineDot} />
@@ -90,10 +156,10 @@ export function ChangelogPage() {
               <Sparkles aria-hidden="true" />
             </span>
             <div>
-              <h2>开始使用关键词替换</h2>
-              <p>立即体验安全、高效的本机文本处理。</p>
+              <h2>开始转换音频</h2>
+              <p>立即体验安全、高效的浏览器本机音频转换。</p>
             </div>
-            <Link className="button button-primary" to="/replace">
+            <Link className="button button-primary" to="/audio-convert">
               开始使用 <ArrowRight aria-hidden="true" />
             </Link>
           </section>

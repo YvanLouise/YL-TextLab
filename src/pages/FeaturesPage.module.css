@@ -1,820 +1,714 @@
 .page {
   min-height: 100vh;
-  overflow: hidden;
-  background: var(--page);
-}
-
-.textLink svg {
-  width: 17px;
-  height: 17px;
-}
-
-.demoDocument {
-  min-width: 0;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
 }
 
-.demoDocument header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 14px;
+.hero {
+  grid-area: hero;
+  padding: 30px 4px 20px;
   border-bottom: 1px solid var(--border-soft);
 }
 
-.demoDocument header strong {
+.hero h1 {
+  margin: 0 0 8px;
   color: var(--text-strong);
-  font-size: 14px;
+  font-size: clamp(32px, 3vw, 44px);
+  letter-spacing: -0.04em;
 }
 
-.demoDocument header span {
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.done {
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 9px;
-  border-radius: 7px;
-  background: var(--success-soft);
-  color: var(--success) !important;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.demoArrow {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border: 1px solid var(--border-soft);
-  border-radius: 50%;
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
-  color: var(--primary);
-}
-
-.demoArrow svg {
-  width: 19px;
-  height: 19px;
-}
-
-.demoText {
-  padding-top: 18px;
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.95;
-}
-
-.demoText p {
-  margin-bottom: 14px;
-}
-
-.demoText mark {
-  padding: 1px 2px;
-  border-radius: 3px;
-  color: inherit;
-}
-
-.sourceMark {
-  background: #dfeaff;
-  color: #185dcc !important;
-}
-
-.resultMark {
-  background: #dff5e5;
-  color: #147a39 !important;
-}
-
-:global(:root[data-theme='dark']) .sourceMark {
-  background: #1b3b70;
-  color: #a8c7ff !important;
-}
-
-:global(:root[data-theme='dark']) .resultMark {
-  background: #17462a;
-  color: #8ce3aa !important;
-}
-
-.featureDetail {
-  display: grid;
-  grid-template-columns: 210px minmax(0, 1fr);
-  gap: 38px;
-  padding-block: 46px 54px;
-}
-
-.featureRail ul {
-  position: sticky;
-  top: 92px;
-  display: grid;
-  gap: 10px;
-  padding: 0;
+.hero p {
   margin: 0;
-  list-style: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.7;
 }
 
-.featureRail li {
+.workspace {
   display: grid;
-  min-height: 58px;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 11px;
-  padding: 10px 12px;
-  border: 1px solid transparent;
-  border-radius: 11px;
+  min-width: 0;
+  grid-template-columns: 230px minmax(0, 1fr);
+  grid-template-areas:
+    'navigation hero'
+    'navigation feature';
+  column-gap: 44px;
+  padding-bottom: 56px;
 }
 
-.featureRail li strong {
+.toolNavigation {
+  grid-area: navigation;
+  min-width: 0;
+  min-height: calc(100vh - 66px);
+  padding: 36px 24px 36px 0;
+  border-right: 1px solid var(--border-soft);
+}
+
+.navigationGroup {
+  padding-bottom: 26px;
+}
+
+.navigationGroup + .navigationGroup {
+  padding-top: 26px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.navigationGroup h2 {
+  margin: 0 0 12px;
   color: var(--text-strong);
-  font-size: 14px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
 }
 
-.featureRail li > span:last-child {
-  padding: 4px 6px;
-  border-radius: 6px;
+.navigationItems {
+  display: grid;
+  gap: 5px;
+}
+
+.navigationItems button,
+.plannedTool {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 52px;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+}
+
+.navigationItems button {
+  cursor: pointer;
+  transition: background var(--motion-fast), color var(--motion-fast);
+}
+
+.navigationItems button:hover {
+  background: var(--surface-muted);
+}
+
+.navigationItems button > svg,
+.plannedTool > svg {
+  width: 21px;
+  height: 21px;
+  stroke-width: 1.8;
+}
+
+.rowArrow {
+  width: 15px !important;
+  height: 15px !important;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity var(--motion-fast), transform var(--motion-fast);
+}
+
+.navigationItems button:hover .rowArrow,
+.selectedTool .rowArrow {
+  opacity: 1;
+  transform: none;
+}
+
+.navigationItems .selectedTool {
+  background: linear-gradient(90deg, var(--primary-soft), color-mix(in srgb, var(--primary-soft) 45%, transparent));
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.selectedTool::before {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--primary);
+  content: '';
+}
+
+.plannedTool {
+  color: var(--text-muted);
+}
+
+.plannedTool small {
+  color: var(--text-muted);
   font-size: 9px;
   white-space: nowrap;
 }
 
-.railIcon {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border-radius: 8px;
+.featureContent {
+  grid-area: feature;
+  min-width: 0;
+  padding-top: 18px;
 }
 
-.railIcon svg {
-  width: 18px;
-  height: 18px;
+.featureHeader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.featureIcon,
+.workflowIcon {
+  display: grid;
+  place-items: center;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.featureIcon {
+  width: 58px;
+  height: 58px;
+  border-radius: 14px;
+}
+
+.featureIcon svg {
+  width: 29px;
+  height: 29px;
   stroke-width: 1.8;
 }
 
-.activeFeature {
-  border-color: var(--primary) !important;
+.featureHeader h2 {
+  margin: 0 0 5px;
+  color: var(--text-strong);
+  font-size: 27px;
+  letter-spacing: -0.025em;
+}
+
+.featureHeader p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.featureHeader :global(.button) {
+  min-height: 42px;
+}
+
+.featureHeader :global(.button) svg,
+.pdfPreview :global(.button) svg {
+  width: 17px;
+  height: 17px;
+}
+
+.transformPreview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 62px minmax(0, 1fr);
+  align-items: stretch;
+  margin-bottom: 12px;
+  border: 1px solid var(--primary-border);
+  border-radius: 13px;
   background: var(--surface);
-  box-shadow: 0 8px 22px rgb(40 108 244 / 9%);
+  overflow: hidden;
 }
 
-.activeFeature .railIcon {
-  background: var(--primary);
-  color: white;
+.previewDocument {
+  min-width: 0;
+  padding: 18px;
 }
 
-.activeFeature > span:last-child {
-  background: var(--success-soft);
+.previewDocument > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.previewDocument > header svg {
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+}
+
+.previewText {
+  min-height: 126px;
+  padding: 17px;
+  margin-top: 13px;
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.previewText p {
+  margin: 0;
+}
+
+.previewText mark {
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: #dfeaff;
+  color: #185dcc;
+}
+
+.resultDocument .previewText mark {
+  background: #dff5e5;
+  color: #147a39;
+}
+
+:global(:root[data-theme='dark']) .previewText mark {
+  background: #1b3b70;
+  color: #a8c7ff;
+}
+
+:global(:root[data-theme='dark']) .resultDocument .previewText mark {
+  background: #17462a;
+  color: #8ce3aa;
+}
+
+.previewDocument > footer {
+  display: flex;
+  min-height: 28px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.previewDocument > footer strong {
+  color: var(--primary);
+}
+
+.completed {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--success);
 }
 
-.upcomingFeature {
-  color: var(--text-muted);
+.completed svg {
+  width: 16px;
+  height: 16px;
 }
 
-.upcomingFeature strong {
-  color: var(--text-muted) !important;
-}
-
-.upcomingFeature .railIcon,
-.upcomingFeature > span:last-child {
-  background: var(--surface-muted);
-}
-
-.featureHeading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 24px;
-}
-
-.featureHeading h1,
-.rules h2 {
-  margin-bottom: 8px;
-  color: var(--text-strong);
-  font-size: 26px;
-}
-
-.featureHeading p,
-.rules > header p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.textLink {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding-top: 5px;
+.transformArrow {
+  position: relative;
+  display: grid;
+  place-items: center;
   color: var(--primary);
-  font-size: 14px;
-  font-weight: 700;
-  text-decoration: none;
-  white-space: nowrap;
+}
+
+.transformArrow::before,
+.transformArrow::after {
+  position: absolute;
+  top: 50%;
+  width: calc(50% - 19px);
+  border-top: 1px dashed #9aabc4;
+  content: '';
+}
+
+.transformArrow::before { left: 0; }
+.transformArrow::after { right: 0; }
+
+.transformArrow > svg:first-child {
+  width: 38px;
+  height: 38px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.transformArrow > svg:last-child {
+  display: none;
 }
 
 .workflow {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  margin-bottom: 26px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 28px;
+  border: 1px solid var(--primary-border);
+  border-radius: 11px;
   background: var(--surface);
-  overflow: hidden;
 }
 
 .workflow article {
   position: relative;
   display: grid;
-  min-height: 126px;
-  grid-template-columns: auto auto 1fr;
-  align-content: center;
+  min-width: 0;
+  min-height: 82px;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
-  padding: 22px;
-  border-left: 1px solid var(--border-soft);
+  gap: 11px;
+  padding: 13px 24px;
 }
 
-.workflow article:first-child {
-  border-left: 0;
+.workflowIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
 }
 
-.stepNumber {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--primary);
-  color: white;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.workflow article > svg:not(.stepArrow) {
-  width: 25px;
-  height: 25px;
-  color: var(--primary);
-  stroke-width: 1.7;
+.workflowIcon svg {
+  width: 22px;
+  height: 22px;
 }
 
 .workflow h3 {
-  margin-bottom: 5px;
+  margin: 0 0 3px;
   color: var(--text-strong);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .workflow p {
   margin: 0;
   color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.65;
+  font-size: 10px;
+  line-height: 1.55;
 }
 
-.stepArrow {
+.workflowArrow {
   position: absolute;
-  z-index: 2;
   top: 50%;
-  right: -10px;
-  width: 18px;
-  height: 18px;
-  padding: 3px;
+  right: -8px;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  padding: 2px;
   border-radius: 50%;
   background: var(--surface);
-  color: #a6b4c9;
+  color: #8b9ab0;
   transform: translateY(-50%);
 }
 
-.demoPanel {
-  margin-bottom: 42px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-}
-
-.demoHeader {
+.detailList > header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 18px 20px;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.detailList > header svg {
+  width: 22px;
+  height: 22px;
+  color: var(--primary);
+}
+
+.detailList > header h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 19px;
+}
+
+.detailRows {
+  border-top: 1px solid var(--border-soft);
+}
+
+.detailRows article {
+  display: grid;
+  min-height: 60px;
+  grid-template-columns: 34px 180px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border-soft);
 }
 
-.demoHeader h3 {
-  margin-bottom: 3px;
-  color: var(--text-strong);
-  font-size: 16px;
-}
-
-.demoHeader p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.demoGrid {
+.ruleIcon {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: stretch;
-  gap: 14px;
-  padding: 18px;
-  background: var(--page-cool);
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: var(--primary);
 }
 
-.demoSettings {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 11px;
-  padding: 15px;
-  border: 1px solid var(--border-soft);
-  border-radius: 11px;
-  background: var(--surface);
+.ruleIcon svg {
+  width: 21px;
+  height: 21px;
 }
 
-.demoSettings > strong {
+.detailRows h3 {
+  margin: 0;
   color: var(--text-strong);
   font-size: 13px;
 }
 
-.demoSettings label {
-  display: grid;
-  gap: 5px;
+.detailRows p {
+  margin: 0;
   color: var(--text-muted);
-  font-size: 10px;
-}
-
-.demoSettings label span {
-  padding: 8px 9px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--text-strong);
   font-size: 12px;
+  line-height: 1.55;
 }
 
-.demoSettings ul {
-  display: grid;
-  gap: 6px;
-  padding: 0;
-  margin: 2px 0 5px;
-  list-style: none;
-}
-
-.demoSettings li {
+.pdfPreview {
   display: flex;
+  min-height: 270px;
   align-items: center;
-  gap: 5px;
-  color: var(--text-muted);
-  font-size: 9px;
+  justify-content: center;
+  flex-direction: column;
+  padding: 32px;
+  margin-bottom: 12px;
+  border: 1px solid var(--primary-border);
+  border-radius: 13px;
+  background: linear-gradient(150deg, var(--surface), var(--surface-blue));
+  text-align: center;
 }
 
-.demoSettings li svg {
-  width: 12px;
-  height: 12px;
+.imagePreview {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.formatPreview {
+  display: flex;
+  grid-column: 2;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.formatPreview span {
+  padding: 5px 8px;
+  border: 1px solid var(--primary-border);
+  border-radius: 6px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.pdfDocumentIcon {
+  display: grid;
+  width: 68px;
+  height: 68px;
+  place-items: center;
+  margin-bottom: 14px;
+  border: 1px solid var(--primary-border);
+  border-radius: 16px;
+  background: var(--surface);
   color: var(--primary);
 }
 
-.demoSettings :global(.button) {
-  min-height: 36px;
-  padding-inline: 10px;
-  margin-top: auto;
-  font-size: 11px;
+.pdfDocumentIcon svg {
+  width: 34px;
+  height: 34px;
+  stroke-width: 1.6;
 }
 
-.demoDocument {
-  min-height: 250px;
-  padding: 16px;
-  box-shadow: none;
+.pdfPreview h3 {
+  margin: 0 0 6px;
+  color: var(--text-strong);
+  font-size: 20px;
 }
 
-.demoArrow {
-  align-self: center;
-}
-
-.rules {
-  scroll-margin-top: 90px;
-}
-
-.rules > header {
-  margin-bottom: 18px;
-}
-
-.tableWrap {
-  overflow-x: auto;
-  border: 1px solid var(--primary-border);
-  border-radius: var(--radius-md);
-}
-
-.rules table {
-  width: 100%;
-  border-collapse: collapse;
-  background: var(--surface);
+.pdfPreview p {
+  margin: 0 0 18px;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
-.rules th,
-.rules td {
-  padding: 15px 17px;
-  border-top: 1px solid var(--border-soft);
-  color: var(--text-muted);
-  line-height: 1.6;
-  text-align: left;
-}
-
-.rules thead th {
-  border-top: 0;
-  background: var(--surface-blue);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.rules tbody th {
-  width: 180px;
-  color: var(--text-strong);
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.rules tbody th svg {
-  display: inline-block;
-  width: 23px;
-  height: 23px;
-  padding: 4px;
-  margin-right: 9px;
-  border: 1px solid var(--primary);
-  border-radius: 5px;
-  color: var(--primary);
-  vertical-align: middle;
-}
-
-@media (max-width: 1100px) {
-  .featureDetail {
+@media (max-width: 900px) {
+  .workspace {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      'hero'
+      'navigation'
+      'feature';
+    gap: 20px;
   }
 
-  .featureRail ul {
-    position: static;
-    grid-template-columns: repeat(4, 1fr);
-  }
-
-  .demoGrid {
-    grid-template-columns: 170px minmax(0, 1fr) auto minmax(0, 1fr);
-  }
-
-}
-
-@media (max-width: 860px) {
-  .featureRail ul {
+  .toolNavigation {
+    display: flex;
     overflow-x: auto;
-    grid-template-columns: repeat(4, minmax(190px, 1fr));
-    padding-bottom: 6px;
+    min-height: 0;
+    padding: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-soft);
+    scrollbar-width: none;
   }
 
-  .workflow {
-    grid-template-columns: 1fr;
+  .toolNavigation::-webkit-scrollbar { display: none; }
+
+  .navigationGroup {
+    display: contents;
   }
 
-  .workflow article {
-    border-top: 1px solid var(--border-soft);
-    border-left: 0;
-  }
-
-  .workflow article:first-child {
-    border-top: 0;
-  }
-
-  .stepArrow {
+  .navigationGroup h2 {
     display: none;
   }
 
-  .demoGrid {
-    grid-template-columns: 1fr 1fr;
+  .navigationItems {
+    display: flex;
   }
 
-  .demoSettings {
-    grid-column: 1 / -1;
+  .navigationGroup + .navigationGroup {
+    padding: 0;
+    border: 0;
   }
 
-  .demoArrow {
-    display: none;
+  .navigationItems button,
+  .plannedTool {
+    min-width: max-content;
+    min-height: 48px;
+    grid-template-columns: 20px auto auto;
+    border-radius: 0;
   }
 
+  .selectedTool::before {
+    top: auto;
+    right: 8px;
+    bottom: 0;
+    left: 8px;
+    width: auto;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+  }
+
+  .rowArrow { display: none; }
 }
 
-@media (max-width: 620px) {
-  .featureDetail {
-    gap: 18px;
-    padding-block: 16px 24px;
+@media (max-width: 680px) {
+  .hero {
+    width: calc(100% + 28px);
+    padding: 30px 14px 27px;
+    margin-left: -14px;
+    background: linear-gradient(105deg, var(--surface) 34%, var(--surface-blue));
   }
 
-  .featureRail ul {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    padding: 0;
-    overflow: visible;
+  .hero h1 {
+    margin-bottom: 9px;
+    font-size: 34px;
   }
 
-  .featureRail li {
-    min-height: 48px;
-    grid-template-columns: auto 1fr auto;
-    gap: 7px;
-    padding: 7px 8px;
-    border-color: var(--border-soft);
-    border-radius: 9px;
-    background: color-mix(in srgb, var(--surface) 90%, var(--surface-muted));
+  .hero p {
+    max-width: 340px;
+    font-size: 13px;
   }
 
-  .featureRail li strong {
-    font-size: 11px;
+  .workspace {
+    gap: 22px;
+    padding-block: 0 32px;
   }
 
-  .featureRail li > span:last-child {
-    padding: 3px 4px;
-    font-size: 7.5px;
+  .toolNavigation {
+    width: calc(100% + 28px);
+    margin-left: -14px;
+    padding-inline: 7px;
   }
 
-  .railIcon {
-    width: 28px;
-    height: 28px;
-    border-radius: 7px;
-  }
-
-  .railIcon svg {
-    width: 15px;
-    height: 15px;
-  }
-
-  .featureHeading {
-    align-items: flex-end;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-
-  .featureHeading h1,
-  .rules h2 {
-    margin-bottom: 4px;
-    font-size: 20px;
-  }
-
-  .featureHeading p,
-  .rules > header p {
-    font-size: 10px;
-    line-height: 1.55;
-  }
-
-  .textLink {
-    flex: 0 0 auto;
-    gap: 4px;
-    padding: 6px 8px;
-    border: 1px solid var(--primary-border);
-    border-radius: 7px;
-    background: var(--surface);
-    font-size: 10px;
-  }
-
-  .textLink svg {
-    width: 13px;
-    height: 13px;
-  }
-
-  .workflow {
-    gap: 6px;
-    margin-bottom: 12px;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    overflow: visible;
-  }
-
-  .workflow article {
-    min-height: 64px;
-    grid-template-columns: auto auto 1fr;
-    gap: 8px;
-    padding: 9px 10px;
-    border: 1px solid var(--border-soft);
-    border-radius: 9px;
-    background: var(--surface);
-  }
-
-  .workflow article:first-child {
-    border: 1px solid var(--border-soft);
-  }
-
-  .stepNumber {
-    width: 19px;
-    height: 19px;
-    font-size: 8px;
-  }
-
-  .workflow article > svg:not(.stepArrow) {
-    width: 20px;
-    height: 20px;
-  }
-
-  .workflow h3 {
-    margin-bottom: 2px;
-    font-size: 11px;
-  }
-
-  .workflow p {
-    font-size: 9px;
-    line-height: 1.45;
-  }
-
-  .demoPanel {
-    margin-bottom: 22px;
-    border-radius: 10px;
-  }
-
-  .demoHeader {
-    gap: 10px;
-    padding: 10px 11px;
-  }
-
-  .demoHeader h3 {
-    margin-bottom: 2px;
+  .navigationItems button,
+  .plannedTool {
+    min-height: 54px;
+    padding-inline: 12px;
     font-size: 12px;
   }
 
-  .demoHeader p {
-    font-size: 9px;
-  }
-
-  .done {
-    padding: 3px 6px;
-    border-radius: 5px;
-    font-size: 8px;
-  }
-
-  .demoGrid {
-    grid-template-columns: 1fr;
-    gap: 7px;
-    padding: 8px;
-  }
-
-  .demoSettings,
-  .demoDocument {
-    grid-column: auto;
-  }
-
-  .demoSettings {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    padding: 9px;
-    border-radius: 8px;
-  }
-
-  .demoSettings > strong,
-  .demoSettings ul,
-  .demoSettings :global(.button) {
-    grid-column: 1 / -1;
-  }
-
-  .demoSettings > strong {
-    font-size: 11px;
-  }
-
-  .demoSettings label {
-    gap: 3px;
-    font-size: 8px;
-  }
-
-  .demoSettings label span {
-    padding: 6px 7px;
-    border-radius: 6px;
-    font-size: 10px;
-  }
-
-  .demoSettings ul {
-    grid-template-columns: repeat(3, auto);
-    gap: 4px 8px;
-    margin: 0;
-  }
-
-  .demoSettings li {
-    font-size: 7.5px;
-  }
-
-  .demoSettings li svg {
-    width: 10px;
-    height: 10px;
-  }
-
-  .demoSettings :global(.button) {
-    min-height: 31px;
-    font-size: 10px;
-  }
-
-  .demoDocument {
-    min-height: 122px;
-    padding: 10px;
-    border-radius: 8px;
-  }
-
-  .demoDocument header {
-    padding-bottom: 7px;
-  }
-
-  .demoDocument header strong {
-    font-size: 10px;
-  }
-
-  .demoDocument header span {
-    font-size: 8px;
-  }
-
-  .demoText {
-    padding-top: 8px;
-    font-size: 9.5px;
-    line-height: 1.55;
-  }
-
-  .demoText p {
-    margin-bottom: 7px;
-  }
-
-  .rules > header {
-    margin-bottom: 9px;
-  }
-
-  .tableWrap {
-    overflow: visible;
-    border: 0;
-    border-radius: 0;
-  }
-
-  .rules table,
-  .rules tbody,
-  .rules tr,
-  .rules th,
-  .rules td {
-    display: block;
-    width: 100%;
-  }
-
-  .rules thead {
+  .plannedTool small {
     display: none;
   }
 
-  .rules tbody {
-    display: grid;
-    gap: 7px;
+  .featureHeader {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    margin-bottom: 22px;
   }
 
-  .rules tr {
-    padding: 10px;
-    border: 1px solid var(--border-soft);
-    border-radius: 9px;
-    background: var(--surface);
+  .featureContent {
+    padding-top: 0;
   }
 
-  .rules th,
-  .rules td,
-  .rules tbody th {
-    min-width: 0;
-    padding: 0;
-    border: 0;
-    white-space: normal;
+  .featureIcon {
+    display: none;
   }
 
-  .rules tbody th {
-    margin-bottom: 7px;
+  .featureHeader h2 {
+    font-size: 25px;
+  }
+
+  .featureHeader p {
     font-size: 11px;
   }
 
-  .rules tbody th svg {
-    width: 20px;
-    height: 20px;
-    padding: 3px;
-    margin-right: 7px;
+  .featureHeader :global(.button) {
+    min-height: 38px;
+    padding-inline: 13px;
+    font-size: 11px;
   }
 
-  .rules td {
-    margin-top: 6px;
+  .transformPreview {
+    grid-template-columns: 1fr;
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+  }
+
+  .previewDocument {
+    padding: 14px;
+    border: 1px solid var(--primary-border);
+    border-radius: 10px;
+  }
+
+  .resultDocument {
+    border-color: color-mix(in srgb, var(--success) 45%, var(--border-soft));
+  }
+
+  .previewText {
+    min-height: 0;
+    padding: 13px;
+    font-size: 11px;
+    line-height: 1.75;
+  }
+
+  .previewDocument > footer {
     font-size: 9px;
-    line-height: 1.5;
   }
 
-  .rules td::before {
+  .transformArrow {
+    height: 44px;
+  }
+
+  .transformArrow::before,
+  .transformArrow::after,
+  .transformArrow > svg:first-child {
+    display: none;
+  }
+
+  .transformArrow > svg:last-child {
     display: block;
-    margin-bottom: 2px;
-    color: var(--primary);
-    content: attr(data-label);
-    font-size: 7.5px;
-    font-weight: 750;
+    width: 24px;
+    height: 24px;
   }
 
+  .workflow {
+    grid-template-columns: 1fr;
+    margin: 18px 0 28px;
+  }
+
+  .workflow article {
+    min-height: 76px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .workflow article:last-child { border-bottom: 0; }
+
+  .workflowArrow {
+    right: 13px;
+    transform: translateY(-50%) rotate(90deg);
+  }
+
+  .workflow article:last-child .workflowArrow { display: none; }
+
+  .detailRows article {
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 8px 10px;
+    padding: 12px 8px;
+  }
+
+  .detailRows p {
+    grid-column: 2;
+    font-size: 10px;
+  }
+
+  .pdfPreview {
+    min-height: 255px;
+    padding: 24px 16px;
+  }
 }

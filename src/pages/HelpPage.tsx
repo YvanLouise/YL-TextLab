@@ -8,7 +8,10 @@ import {
   FileText,
   HardDrive,
   HelpCircle,
+  Images,
+  Layers3,
   ListChecks,
+  Music2,
   Palette,
   Search,
   Settings2,
@@ -67,6 +70,34 @@ const faqs = [
     question: '如何彻底删除本机草稿？',
     answer: '点击替换工具中的“清空”，页面内容和浏览器本机保存的草稿会同时删除。',
   },
+  {
+    question: 'GIF 转换后为什么没有动画？',
+    answer: '首版图片转换会读取 GIF 的第一帧并输出静态图片，不保留动画时间轴。',
+  },
+  {
+    question: 'DDS 会保留压缩和 mipmap 吗？',
+    answer: 'DDS 输入可读取 DXT1、DXT3、DXT5 和未压缩像素；输出为未压缩 RGBA8，仅包含最高分辨率图层。',
+  },
+  {
+    question: '转换音频会上传歌曲吗？',
+    answer: '不会。音频和转换结果都只存在于当前浏览器页面，离开页面或清空列表后不会保留。',
+  },
+  {
+    question: '为什么部分音频没有保留封面？',
+    answer: '不同格式对封面的支持不同。工具会优先保留兼容封面；不兼容时会保留音频与文本标签并给出提示。',
+  },
+]
+
+const imageFormats = [
+  { title: '常用图片', badge: 'IMG', description: 'PNG、JPG、WebP、BMP 可作为输入与输出；GIF 读取第一帧，AVIF 取决于浏览器解码能力。' },
+  { title: '应用图标', badge: 'ICO', description: 'ICO 可输出单一尺寸，也可一次生成 16 至 256 像素的多分辨率图标。' },
+  { title: '游戏素材', badge: 'TGA', description: '支持 24/32 位 TGA 与常见 DDS 纹理；DDS 输出为兼容性较好的未压缩 RGBA8。' },
+]
+
+const audioFormats = [
+  { title: '主流输出', badge: 'MP3', description: '支持输出 MP3、WAV、FLAC、M4A、AAC、OGG 与 Opus；WMA、AIFF 可作为输入。' },
+  { title: '质量参数', badge: 'HQ', description: '有损格式提供实用质量档位，并可选择保持原始、44.1 kHz 或 48 kHz 采样率。' },
+  { title: '标签与批量', badge: 'ZIP', description: '尽力保留标准歌曲标签，支持顺序转换、单项下载与 ZIP 打包。' },
 ]
 
 export function HelpPage() {
@@ -79,6 +110,8 @@ export function HelpPage() {
             <HelpCircle aria-hidden="true" /> 使用帮助
           </div>
           <a href="#quick-start">快速开始</a>
+          <a href="#image-convert">图片格式转换</a>
+          <a href="#audio-convert">音频格式转换</a>
           <a href="#matching">匹配选项说明</a>
           <a href="#privacy">数据与草稿</a>
           <a href="#faq">常见问题</a>
@@ -94,7 +127,7 @@ export function HelpPage() {
           <header className={styles.pageIntro}>
             <div>
               <h1>使用帮助</h1>
-              <p>快速了解关键词替换工具的使用方法、匹配规则和本机草稿机制。</p>
+              <p>快速了解关键词替换、PDF、图片与音频工具及本机隐私机制。</p>
             </div>
             <img
               src={`${import.meta.env.BASE_URL}assets/help-illustration.png`}
@@ -113,6 +146,32 @@ export function HelpPage() {
                   <h3>{title}</h3>
                   <p>{description}</p>
                   {index < steps.length - 1 ? <ArrowRight className={styles.stepArrow} /> : null}
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section id="image-convert" className={styles.section}>
+            <h2>图片格式转换</h2>
+            <p className={styles.sectionLead}>单图与批量使用相同流程：添加图片、选择目标格式、执行转换并下载结果。</p>
+            <div className={styles.optionCards}>
+              {imageFormats.map((format) => (
+                <article key={format.title}>
+                  <span>{format.badge}</span>
+                  <div><h3>{format.title}</h3><p>{format.description}</p></div>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section id="audio-convert" className={styles.section}>
+            <h2>音频格式转换</h2>
+            <p className={styles.sectionLead}>添加单首或多首音频，选择目标格式与质量参数，在本机依次完成转换。</p>
+            <div className={styles.optionCards}>
+              {audioFormats.map((format) => (
+                <article key={format.title}>
+                  <span>{format.badge}</span>
+                  <div><h3>{format.title}</h3><p>{format.description}</p></div>
                 </article>
               ))}
             </div>
@@ -140,12 +199,12 @@ export function HelpPage() {
               <article>
                 <CloudOff aria-hidden="true" />
                 <h3>不上传服务器</h3>
-                <p>原文、关键词和结果始终只在浏览器本机处理。</p>
+                <p>文本、PDF、图片和音频始终只在当前浏览器本机处理。</p>
               </article>
               <article>
                 <HardDrive aria-hidden="true" />
-                <h3>自动保存草稿</h3>
-                <p>输入内容自动保存在当前浏览器，刷新后可以继续。</p>
+                <h3>仅文本保存草稿</h3>
+                <p>关键词替换会保存本机草稿；PDF、图片和音频文件不会保存。</p>
               </article>
               <article>
                 <Trash2 aria-hidden="true" />
@@ -183,7 +242,7 @@ export function HelpPage() {
               <div>
                 <p>作者</p>
                 <h3>YvanLouise</h3>
-                <span>YL文本处理工具的设计与开发者</span>
+                <span>YL文件工具箱的设计与开发者</span>
               </div>
             </article>
           </section>
@@ -193,18 +252,18 @@ export function HelpPage() {
               <CheckCircle2 aria-hidden="true" />
             </span>
             <div>
-              <h2>准备好开始处理文本了吗？</h2>
-              <p>打开关键词替换工具，体验高效、私密的文本处理。</p>
+              <h2>准备好转换音频了吗？</h2>
+              <p>添加单首或多首音频，在本机完成格式转换。</p>
             </div>
-            <Link className="button button-primary" to="/replace">
-              打开关键词替换工具 <ArrowRight aria-hidden="true" />
+            <Link className="button button-primary" to="/audio-convert">
+              打开音频转换工具 <ArrowRight aria-hidden="true" />
             </Link>
           </section>
         </div>
       </main>
       <Footer />
       <span className="sr-only">
-        <FileText /> <ListChecks /> <ArrowRightLeft />
+        <FileText /> <ListChecks /> <ArrowRightLeft /> <Images /> <Layers3 /> <Music2 />
       </span>
     </div>
   )

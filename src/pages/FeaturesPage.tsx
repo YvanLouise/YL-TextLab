@@ -1,211 +1,393 @@
 import {
+  ArrowDown,
   ArrowRight,
+  Archive,
+  BarChart3,
   CaseSensitive,
   Check,
+  ChevronRight,
   ClipboardCopy,
   ClipboardList,
-  FileSearch,
+  Download,
   FileText,
+  FolderOpen,
+  Images,
+  Layers3,
+  LockKeyhole,
+  Maximize2,
+  Music2,
   RefreshCw,
+  RotateCw,
   ScanText,
   Search,
   Settings2,
+  ShieldCheck,
+  UploadCloud,
   WholeWord,
+  ZoomIn,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Footer } from '../components/Footer'
 import { SiteHeader } from '../components/SiteHeader'
 import styles from './FeaturesPage.module.css'
 
-const featureRail = [
-  { title: '关键词替换', status: '已上线', icon: RefreshCw, active: true },
-  { title: '文本清理', status: '敬请期待', icon: ScanText, active: false },
-  { title: '文本分析', status: '敬请期待', icon: FileSearch, active: false },
-  { title: '批量处理', status: '敬请期待', icon: ClipboardList, active: false },
+type ToolId = 'replace' | 'pdf' | 'image' | 'audio'
+
+interface ToolNavigationItem {
+  id: ToolId
+  title: string
+  icon: LucideIcon
+}
+
+const liveTools: ToolNavigationItem[] = [
+  { id: 'replace', title: '关键词替换', icon: Search },
+  { id: 'pdf', title: 'PDF 查看', icon: FileText },
+  { id: 'image', title: '图片格式转换', icon: Images },
+  { id: 'audio', title: '音频格式转换', icon: Music2 },
 ]
 
-const workflowSteps = [
+const plannedTools = [
+  { title: '文本清理', icon: ScanText },
+  { title: '文本分析', icon: BarChart3 },
+  { title: '批量处理', icon: ClipboardList },
+]
+
+const replacementWorkflow = [
   {
     title: '输入与设置',
-    description: '输入原文与替换内容，按需选择大小写、全字和仅首项规则。',
+    description: '输入原文本并设置查找与替换内容，选择匹配规则。',
     icon: Settings2,
   },
   {
     title: '精准匹配',
-    description: '系统按普通文本完成非重叠匹配，并用蓝色标出原文位置。',
+    description: '按所选规则查找关键词，高亮显示匹配结果。',
     icon: Search,
   },
   {
     title: '编辑与复制',
-    description: '结果使用绿色高亮，可继续手工编辑，再一键复制使用。',
+    description: '查看替换预览，确认无误后一键复制使用。',
     icon: ClipboardCopy,
   },
 ]
 
-const rules = [
+const replacementRules = [
   {
     title: '普通文本',
-    description: '查找内容始终按字面量处理，正则符号和替换值中的 $ 不会被解释。',
-    useCase: '适用于大多数常规替换需求',
+    description: '按普通文本匹配，不支持正则表达式或通配符。',
     icon: FileText,
   },
   {
     title: '区分大小写',
-    description: '开启后严格区分英文大小写，关闭时默认忽略大小写差异。',
-    useCase: '适用于变量名、型号或专有名称',
+    description: '匹配时区分英文大小写，例如“YL”与“yl”被视为不同内容。',
     icon: CaseSensitive,
   },
   {
     title: '全字匹配',
-    description: '英文、数字和下划线按单词边界匹配，中文及混合词按完整字符串匹配。',
-    useCase: '避免替换词组中的局部内容',
+    description: '仅匹配完整的词，避免替换词组中的局部内容。',
     icon: WholeWord,
   },
   {
     title: '仅替换第一个',
-    description: '每次执行只处理原文中第一个符合当前规则的匹配项。',
-    useCase: '适用于只需修改首次出现位置',
+    description: '只替换首次匹配的结果，其余匹配保持不变。',
     icon: RefreshCw,
   },
 ]
 
-function DemoText({ result = false }: { result?: boolean }) {
+const pdfWorkflow = [
+  { title: '选择文件', description: '从本机选择需要阅读的 PDF。', icon: FolderOpen },
+  { title: '本地解析', description: '浏览器直接解析，不上传文件。', icon: ShieldCheck },
+  { title: '阅读与下载', description: '翻页、缩放、旋转并下载原文件。', icon: Download },
+]
+
+const pdfCapabilities = [
+  { title: '翻页与跳转', description: '使用按钮或页码快速定位内容。', icon: RefreshCw },
+  { title: '缩放与适应宽度', description: '按阅读场景调整页面显示比例。', icon: ZoomIn },
+  { title: '旋转与下载', description: '调整页面方向，并随时下载原文件。', icon: RotateCw },
+  { title: '本地隐私', description: '文件仅在当前浏览器中读取，不会上传。', icon: LockKeyhole },
+]
+
+const imageWorkflow = [
+  { title: '添加图片', description: '选择单张图片，或拖拽多张文件批量处理。', icon: UploadCloud },
+  { title: '选择格式', description: '统一设置目标格式、质量、背景或 ICO 尺寸。', icon: Settings2 },
+  { title: '本地下载', description: '逐项下载结果，或将全部文件打包为 ZIP。', icon: Archive },
+]
+
+const imageCapabilities = [
+  { title: '常用图片', description: 'PNG、JPG、WebP 与 BMP 相互转换。', icon: Images },
+  { title: '应用图标', description: '生成单尺寸或多分辨率 ICO 文件。', icon: Layers3 },
+  { title: '游戏素材', description: '读取与输出 TGA，并处理常见 DDS 纹理。', icon: Archive },
+  { title: '本地隐私', description: '图片不上传服务器，也不保存在浏览器草稿中。', icon: LockKeyhole },
+]
+
+const audioWorkflow = [
+  { title: '添加音频', description: '选择单首音乐，或拖拽多个文件加入队列。', icon: UploadCloud },
+  { title: '设置质量', description: '选择格式、质量、采样率、声道与标签保留。', icon: Settings2 },
+  { title: '试听下载', description: '逐项试听与下载，或将结果打包为 ZIP。', icon: Archive },
+]
+
+const audioCapabilities = [
+  { title: '主流格式', description: '输出 MP3、WAV、FLAC、M4A、AAC、OGG 与 Opus。', icon: Music2 },
+  { title: '实用参数', description: '按格式设置质量，并可调整采样率与声道。', icon: Settings2 },
+  { title: '标签与封面', description: '尽力保留歌曲标签，以及目标容器兼容的封面。', icon: FileText },
+  { title: '本地隐私', description: '音频不会上传，也不会保存在浏览器草稿中。', icon: LockKeyhole },
+]
+
+function ToolNavigation({ selected, onSelect }: { selected: ToolId; onSelect: (id: ToolId) => void }) {
   return (
-    <div className={styles.demoText}>
-      <p>
-        <mark className={result ? styles.resultMark : styles.sourceMark}>
-          {result ? '悦联智能' : '易联科技'}
-        </mark>
-        致力于为企业提供高效、稳定、安全的数字化解决方案。
-      </p>
-      <p>
-        选择
-        <mark className={result ? styles.resultMark : styles.sourceMark}>
-          {result ? '悦联智能' : '易联科技'}
-        </mark>
-        ，选择值得信赖的合作伙伴。
-      </p>
+    <aside className={styles.toolNavigation} aria-label="功能选择">
+      <div className={styles.navigationGroup}>
+        <h2>已上线</h2>
+        <div className={styles.navigationItems}>
+          {liveTools.map(({ id, title, icon: Icon }) => (
+            <button
+              className={selected === id ? styles.selectedTool : ''}
+              type="button"
+              aria-pressed={selected === id}
+              onClick={() => onSelect(id)}
+              key={id}
+            >
+              <Icon aria-hidden="true" />
+              <span>{title}</span>
+              <ChevronRight className={styles.rowArrow} aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className={`${styles.navigationGroup} ${styles.plannedGroup}`}>
+        <h2>计划中</h2>
+        <div className={styles.navigationItems}>
+          {plannedTools.map(({ title, icon: Icon }) => (
+            <div className={styles.plannedTool} key={title} aria-disabled="true">
+              <Icon aria-hidden="true" />
+              <span>{title}</span>
+              <small>敬请期待</small>
+            </div>
+          ))}
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+function Workflow({ items }: { items: typeof replacementWorkflow }) {
+  return (
+    <section className={styles.workflow} aria-label="使用流程">
+      {items.map(({ title, description, icon: Icon }, index) => (
+        <article key={title}>
+          <span className={styles.workflowIcon}><Icon aria-hidden="true" /></span>
+          <div>
+            <h3>{title}</h3>
+            <p>{description}</p>
+          </div>
+          {index < items.length - 1 ? <ChevronRight className={styles.workflowArrow} aria-hidden="true" /> : null}
+        </article>
+      ))}
+    </section>
+  )
+}
+
+function ReplacementFeature() {
+  return (
+    <div className={styles.featureContent}>
+      <header className={styles.featureHeader}>
+        <span className={styles.featureIcon}><Search aria-hidden="true" /></span>
+        <div>
+          <h2>关键词替换</h2>
+          <p>精准查找文本中的指定关键词，并按规则替换为新的内容。</p>
+        </div>
+        <Link className="button button-primary" to="/replace">
+          打开工具 <ArrowRight aria-hidden="true" />
+        </Link>
+      </header>
+
+      <section className={styles.transformPreview} aria-labelledby="preview-title">
+        <h3 id="preview-title" className="sr-only">关键词替换效果预览</h3>
+        <article className={`${styles.previewDocument} ${styles.sourceDocument}`}>
+          <header><FileText aria-hidden="true" /><strong>源文本（示例）</strong></header>
+          <div className={styles.previewText}>
+            <p>YL文件工具箱是一款简单易用的 <mark>本地</mark> 工具，</p>
+            <p>支持关键词替换与 PDF 查看。数据仅在 <mark>本地</mark> 处理。</p>
+          </div>
+          <footer><span>查找：<strong>本地</strong></span><span>替换为：<strong>离线</strong></span></footer>
+        </article>
+
+        <span className={styles.transformArrow} aria-hidden="true"><ArrowRight /><ArrowDown /></span>
+
+        <article className={`${styles.previewDocument} ${styles.resultDocument}`}>
+          <header><FileText aria-hidden="true" /><strong>替换结果（预览）</strong></header>
+          <div className={styles.previewText}>
+            <p>YL文件工具箱是一款简单易用的 <mark>离线</mark> 工具，</p>
+            <p>支持关键词替换与 PDF 查看。数据仅在 <mark>离线</mark> 处理。</p>
+          </div>
+          <footer><span className={styles.completed}><Check aria-hidden="true" /> 已替换 2 处</span></footer>
+        </article>
+      </section>
+
+      <Workflow items={replacementWorkflow} />
+
+      <section className={styles.detailList} aria-labelledby="rules-title">
+        <header><FileText aria-hidden="true" /><h2 id="rules-title">匹配规则</h2></header>
+        <div className={styles.detailRows}>
+          {replacementRules.map(({ title, description, icon: Icon }) => (
+            <article key={title}>
+              <span className={styles.ruleIcon}><Icon aria-hidden="true" /></span>
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function PdfFeature() {
+  return (
+    <div className={styles.featureContent}>
+      <header className={styles.featureHeader}>
+        <span className={styles.featureIcon}><FileText aria-hidden="true" /></span>
+        <div>
+          <h2>PDF 查看</h2>
+          <p>直接在浏览器中打开本机 PDF，支持翻页、缩放与旋转。</p>
+        </div>
+        <Link className="button button-primary" to="/pdf">
+          打开工具 <ArrowRight aria-hidden="true" />
+        </Link>
+      </header>
+
+      <section className={styles.pdfPreview} aria-labelledby="pdf-preview-title">
+        <span className={styles.pdfDocumentIcon}><FileText aria-hidden="true" /></span>
+        <h3 id="pdf-preview-title">选择一个 PDF 文件</h3>
+        <p>文件仅在当前浏览器中读取，不会上传或保存。</p>
+        <Link className="button button-primary" to="/pdf"><FolderOpen aria-hidden="true" /> 选择 PDF</Link>
+      </section>
+
+      <Workflow items={pdfWorkflow} />
+
+      <section className={styles.detailList} aria-labelledby="capability-title">
+        <header><Maximize2 aria-hidden="true" /><h2 id="capability-title">查看能力</h2></header>
+        <div className={styles.detailRows}>
+          {pdfCapabilities.map(({ title, description, icon: Icon }) => (
+            <article key={title}>
+              <span className={styles.ruleIcon}><Icon aria-hidden="true" /></span>
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function ImageFeature() {
+  return (
+    <div className={styles.featureContent}>
+      <header className={styles.featureHeader}>
+        <span className={styles.featureIcon}><Images aria-hidden="true" /></span>
+        <div>
+          <h2>图片格式转换</h2>
+          <p>批量转换常用图片、应用图标与游戏纹理，全程在本机完成。</p>
+        </div>
+        <Link className="button button-primary" to="/image-convert">
+          打开工具 <ArrowRight aria-hidden="true" />
+        </Link>
+      </header>
+
+      <section className={`${styles.pdfPreview} ${styles.imagePreview}`} aria-labelledby="image-preview-title">
+        <span className={styles.pdfDocumentIcon}><Images aria-hidden="true" /></span>
+        <h3 id="image-preview-title">7 种目标格式自由选择</h3>
+        <p>保留原始分辨率，并按目标格式处理透明通道与图标尺寸。</p>
+        <div className={styles.formatPreview} aria-label="支持的输出格式">
+          {['PNG', 'JPG', 'WebP', 'BMP', 'ICO', 'TGA', 'DDS'].map((format) => <span key={format}>{format}</span>)}
+        </div>
+        <Link className="button button-primary" to="/image-convert"><UploadCloud aria-hidden="true" /> 添加图片</Link>
+      </section>
+
+      <Workflow items={imageWorkflow} />
+
+      <section className={styles.detailList} aria-labelledby="image-capability-title">
+        <header><Layers3 aria-hidden="true" /><h2 id="image-capability-title">格式能力</h2></header>
+        <div className={styles.detailRows}>
+          {imageCapabilities.map(({ title, description, icon: Icon }) => (
+            <article key={title}>
+              <span className={styles.ruleIcon}><Icon aria-hidden="true" /></span>
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function AudioFeature() {
+  return (
+    <div className={styles.featureContent}>
+      <header className={styles.featureHeader}>
+        <span className={styles.featureIcon}><Music2 aria-hidden="true" /></span>
+        <div>
+          <h2>音频格式转换</h2>
+          <p>批量转换常用音乐格式，设置质量参数并尽力保留歌曲标签。</p>
+        </div>
+        <Link className="button button-primary" to="/audio-convert">
+          打开工具 <ArrowRight aria-hidden="true" />
+        </Link>
+      </header>
+
+      <section className={`${styles.pdfPreview} ${styles.imagePreview}`} aria-labelledby="audio-preview-title">
+        <span className={styles.pdfDocumentIcon}><Music2 aria-hidden="true" /></span>
+        <h3 id="audio-preview-title">7 种目标格式自由选择</h3>
+        <p>本机完成转码，按格式设置码率、采样率与声道。</p>
+        <div className={styles.formatPreview} aria-label="支持的音频输出格式">
+          {['MP3', 'WAV', 'FLAC', 'M4A', 'AAC', 'OGG', 'Opus'].map((format) => <span key={format}>{format}</span>)}
+        </div>
+        <Link className="button button-primary" to="/audio-convert"><UploadCloud aria-hidden="true" /> 添加音频</Link>
+      </section>
+
+      <Workflow items={audioWorkflow} />
+
+      <section className={styles.detailList} aria-labelledby="audio-capability-title">
+        <header><Music2 aria-hidden="true" /><h2 id="audio-capability-title">音频能力</h2></header>
+        <div className={styles.detailRows}>
+          {audioCapabilities.map(({ title, description, icon: Icon }) => (
+            <article key={title}>
+              <span className={styles.ruleIcon}><Icon aria-hidden="true" /></span>
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
     </div>
   )
 }
 
 export function FeaturesPage() {
+  const [selectedTool, setSelectedTool] = useState<ToolId>('replace')
+
   return (
     <div className={styles.page}>
       <SiteHeader />
       <main>
-        <section className={`page-shell ${styles.featureDetail}`} aria-labelledby="replacement-title">
-          <aside className={styles.featureRail} aria-label="功能列表">
-            <ul>
-              {featureRail.map(({ title, status, icon: Icon, active }) => (
-                <li className={active ? styles.activeFeature : styles.upcomingFeature} key={title}>
-                  <span className={styles.railIcon}>
-                    <Icon aria-hidden="true" />
-                  </span>
-                  <strong>{title}</strong>
-                  <span>{status}</span>
-                </li>
-              ))}
-            </ul>
-          </aside>
-
-          <div className={styles.featureBody}>
-            <header className={styles.featureHeading}>
-              <div>
-                <h1 id="replacement-title">关键词替换</h1>
-                <p>精准查找文本中的指定关键词，并按规则替换为新的内容。</p>
-              </div>
-              <Link className={styles.textLink} to="/replace">
-                打开工具 <ArrowRight aria-hidden="true" />
-              </Link>
-            </header>
-
-            <div className={styles.workflow}>
-              {workflowSteps.map(({ title, description, icon: Icon }, index) => (
-                <article key={title}>
-                  <span className={styles.stepNumber}>{index + 1}</span>
-                  <Icon aria-hidden="true" />
-                  <div>
-                    <h3>{title}</h3>
-                    <p>{description}</p>
-                  </div>
-                  {index < workflowSteps.length - 1 ? (
-                    <ArrowRight className={styles.stepArrow} aria-hidden="true" />
-                  ) : null}
-                </article>
-              ))}
-            </div>
-
-            <section className={styles.demoPanel} aria-labelledby="demo-title">
-              <header className={styles.demoHeader}>
-                <div>
-                  <h3 id="demo-title">关键词替换预览</h3>
-                  <p>蓝色显示原文匹配，绿色显示替换后的内容。</p>
-                </div>
-                <span className={styles.done}>已替换 2 处</span>
-              </header>
-
-              <div className={styles.demoGrid}>
-                <div className={styles.demoSettings}>
-                  <strong>替换设置</strong>
-                  <label>
-                    查找关键词
-                    <span>易联科技</span>
-                  </label>
-                  <label>
-                    替换为
-                    <span>悦联智能</span>
-                  </label>
-                  <ul aria-label="示例匹配选项">
-                    <li><Check aria-hidden="true" /> 不区分大小写</li>
-                    <li><Check aria-hidden="true" /> 全字匹配</li>
-                    <li>仅替换第一个：关闭</li>
-                  </ul>
-                  <Link className="button button-primary" to="/replace">
-                    体验此流程
-                  </Link>
-                </div>
-                <article className={styles.demoDocument}>
-                  <header><strong>原始文本</strong><span>32 字符</span></header>
-                  <DemoText />
-                </article>
-                <span className={styles.demoArrow} aria-hidden="true"><ArrowRight /></span>
-                <article className={styles.demoDocument}>
-                  <header><strong>替换结果</strong><span>32 字符</span></header>
-                  <DemoText result />
-                </article>
-              </div>
-            </section>
-
-            <section id="matching-rules" className={styles.rules} aria-labelledby="rules-title">
-              <header>
-                <h2 id="rules-title">匹配规则一览</h2>
-                <p>选择合适的匹配规则，精确控制替换范围。</p>
-              </header>
-              <div className={styles.tableWrap}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>规则</th>
-                      <th>说明</th>
-                      <th>适用场景</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rules.map(({ title, description, useCase, icon: Icon }) => (
-                      <tr key={title}>
-                        <th scope="row"><Icon aria-hidden="true" /> {title}</th>
-                        <td data-label="规则说明">{description}</td>
-                        <td data-label="适用场景">{useCase}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-        </section>
-
+        <div className={`page-shell ${styles.workspace}`}>
+          <section className={styles.hero}>
+            <h1>功能中心</h1>
+            <p>关键词替换、PDF 查看、图片与音频格式转换均已上线，更多实用功能持续完善中。</p>
+          </section>
+          <ToolNavigation selected={selectedTool} onSelect={setSelectedTool} />
+          {selectedTool === 'replace'
+            ? <ReplacementFeature />
+            : selectedTool === 'pdf'
+              ? <PdfFeature />
+              : selectedTool === 'image'
+                ? <ImageFeature />
+                : <AudioFeature />}
+        </div>
       </main>
       <Footer />
     </div>

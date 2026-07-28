@@ -1,4 +1,46 @@
 import { expect, test } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
+
+const minimalPdf = Buffer.from(`%PDF-1.4
+1 0 obj <</Type /Catalog /Pages 2 0 R>> endobj
+2 0 obj <</Type /Pages /Kids [3 0 R] /Count 1>> endobj
+3 0 obj <</Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources <</Font <</F1 4 0 R>>>> /Contents 5 0 R>> endobj
+4 0 obj <</Type /Font /Subtype /Type1 /BaseFont /Helvetica>> endobj
+5 0 obj <</Length 45>> stream
+BT /F1 24 Tf 72 720 Td (PDF Viewer Test) Tj ET
+endstream endobj
+trailer <</Root 1 0 R>>
+%%EOF`)
+
+const onePixelPng = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgQIA6iJZkgAAAABJRU5ErkJggg==',
+  'base64',
+)
+
+function createTinyWav() {
+  const sampleRate = 8000
+  const sampleCount = 800
+  const dataSize = sampleCount * 2
+  const buffer = Buffer.alloc(44 + dataSize)
+  buffer.write('RIFF', 0)
+  buffer.writeUInt32LE(36 + dataSize, 4)
+  buffer.write('WAVE', 8)
+  buffer.write('fmt ', 12)
+  buffer.writeUInt32LE(16, 16)
+  buffer.writeUInt16LE(1, 20)
+  buffer.writeUInt16LE(1, 22)
+  buffer.writeUInt32LE(sampleRate, 24)
+  buffer.writeUInt32LE(sampleRate * 2, 28)
+  buffer.writeUInt16LE(2, 32)
+  buffer.writeUInt16LE(16, 34)
+  buffer.write('data', 36)
+  buffer.writeUInt32LE(dataSize, 40)
+  for (let index = 0; index < sampleCount; index += 1) {
+    const sample = Math.round(Math.sin((index / sampleRate) * Math.PI * 2 * 440) * 9000)
+    buffer.writeInt16LE(sample, 44 + index * 2)
+  }
+  return buffer
+}
 
 test('home navigation and replacement workflow', async ({ page }) => {
   await page.goto('/')
@@ -50,13 +92,133 @@ test('help, changelog and mobile navigation are usable', async ({ page, isMobile
   }
 })
 
-test('features page explains the live tool and removes duplicate closing sections', async ({ page }) => {
+test('features page presents live and planned tools', async ({ page }) => {
   await page.goto('/features')
   await expect(page.getByRole('heading', { name: '功能详情' })).toHaveCount(0)
-  await expect(page.getByRole('heading', { name: '关键词替换', level: 1 })).toBeVisible()
-  await expect(page.getByRole('heading', { name: '匹配规则一览' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '功能中心', level: 1 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '关键词替换', level: 2 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '匹配规则' })).toBeVisible()
   await expect(page.getByText('敬请期待', { exact: true })).toHaveCount(3)
   await expect(page.getByRole('link', { name: '文本清理' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: '更多功能，敬请期待' })).toHaveCount(0)
   await expect(page.getByText(/文本仅保存在本机浏览器/)).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'PDF 查看' }).click()
+  await expect(page.getByRole('heading', { name: 'PDF 查看', level: 2 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '查看能力' })).toBeVisible()
+
+  await page.getByRole('button', { name: '图片格式转换' }).click()
+  await expect(page.getByRole('heading', { name: '图片格式转换', level: 2 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '格式能力' })).toBeVisible()
+
+  await page.getByRole('button', { name: '音频格式转换' }).click()
+  await expect(page.getByRole('heading', { name: '音频格式转换', level: 2 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '音频能力' })).toBeVisible()
+})
+
+test('opens and controls a local PDF from the features page', async ({ page }) => {
+  await page.goto('/features')
+  await page.getByRole('button', { name: 'PDF 查看' }).click()
+  await page.getByRole('link', { name: '打开工具' }).click()
+  await expect(page).toHaveURL(/\/pdf$/)
+  await page.getByLabel('选择 PDF 文件').setInputFiles({
+    name: 'sample.pdf',
+    mimeType: 'application/pdf',
+    buffer: minimalPdf,
+  })
+
+  await expect(page.getByText('sample.pdf')).toBeVisible()
+  await expect(page.getByTitle('sample.pdf')).toContainText('1 页')
+  const canvas = page.locator('canvas[aria-label="PDF 第 1 页"]')
+  await expect(canvas).toBeVisible()
+  await expect.poll(async () => Number(await canvas.getAttribute('width'))).toBeGreaterThan(0)
+
+  await page.getByRole('button', { name: '放大' }).click()
+  await expect(page.getByText(/%$/)).toBeVisible()
+  await page.getByRole('button', { name: '顺时针旋转' }).click()
+  await expect(page.getByRole('button', { name: '上一页' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '下一页' })).toBeDisabled()
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: '下载原文件' }).click()
+  const downloadedFile = await download
+  expect(downloadedFile.suggestedFilename()).toBe('sample.pdf')
+  await downloadedFile.delete()
+  await page.getByRole('button', { name: '关闭 PDF' }).click()
+  await expect(page.getByRole('heading', { name: '选择一个 PDF 文件' })).toBeVisible()
+})
+
+test('converts a local PNG to ICO and keeps the mobile layout inside the viewport', async ({ page }) => {
+  await page.goto('/image-convert')
+  await expect(page.getByRole('heading', { name: '图片格式转换', level: 1 })).toBeVisible()
+  await page.getByLabel('选择图片文件').setInputFiles({
+    name: 'pixel.png',
+    mimeType: 'image/png',
+    buffer: onePixelPng,
+  })
+  await expect(page.getByText('1 × 1')).toBeVisible()
+  await page.getByRole('button', { name: /ICO/ }).click()
+  await page.getByRole('button', { name: /开始转换/ }).click()
+  await expect(page.getByText('1 个文件转换完成')).toBeVisible()
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('link', { name: '下载 pixel.ico' }).click()
+  const result = await download
+  expect(result.suggestedFilename()).toBe('pixel.ico')
+  await result.delete()
+
+  const bodyWidth = await page.locator('body').evaluate((element) => element.scrollWidth)
+  const viewportWidth = page.viewportSize()?.width ?? 0
+  expect(bodyWidth).toBeLessThanOrEqual(viewportWidth)
+})
+
+test('converts a local WAV to MP3 without uploading audio', async ({ page, isMobile }) => {
+  const externalMutations: string[] = []
+  page.on('request', (request) => {
+    if (!['GET', 'HEAD'].includes(request.method())) externalMutations.push(request.url())
+  })
+
+  await page.goto('/audio-convert')
+  await expect(page.getByRole('heading', { name: '音频格式转换', level: 1 })).toBeVisible()
+  await page.getByLabel('选择音频文件').setInputFiles({
+    name: 'tone.wav',
+    mimeType: 'audio/wav',
+    buffer: createTinyWav(),
+  })
+  await expect(page.getByText('等待转换')).toBeVisible()
+
+  const bodyWidth = await page.locator('body').evaluate((element) => element.scrollWidth)
+  const viewportWidth = page.viewportSize()?.width ?? 0
+  expect(bodyWidth).toBeLessThanOrEqual(viewportWidth)
+  if (isMobile) return
+
+  await page.getByRole('button', { name: /开始转换/ }).click()
+  await expect(page.getByText('1 个音频转换完成')).toBeVisible({ timeout: 120_000 })
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('link', { name: '下载 tone.mp3' }).click()
+  const result = await download
+  expect(result.suggestedFilename()).toBe('tone.mp3')
+  const path = await result.path()
+  expect(path).not.toBeNull()
+  const output = await readFile(path!)
+  const hasId3Header = output.subarray(0, 3).toString('ascii') === 'ID3'
+  const hasMp3Frame = output[0] === 0xff && (output[1] & 0xe0) === 0xe0
+  expect(hasId3Header || hasMp3Frame).toBe(true)
+  await result.delete()
+
+  await page.getByRole('button', { name: /FLAC/ }).click()
+  await page.getByRole('button', { name: /开始转换/ }).click()
+  await expect(page.getByRole('link', { name: '下载 tone.flac' })).toBeVisible({ timeout: 120_000 })
+
+  await page.getByRole('button', { name: '清空' }).click()
+  await page.getByRole('button', { name: /M4A/ }).click()
+  await page.getByLabel('选择音频文件').setInputFiles([
+    { name: 'one.wav', mimeType: 'audio/wav', buffer: createTinyWav() },
+    { name: 'two.wav', mimeType: 'audio/wav', buffer: createTinyWav() },
+  ])
+  await expect(page.getByText('2 / 20 个文件')).toBeVisible()
+  await page.getByRole('button', { name: /开始转换/ }).click()
+  await expect(page.getByText('2 个音频转换完成')).toBeVisible({ timeout: 120_000 })
+  expect(externalMutations).toEqual([])
 })
