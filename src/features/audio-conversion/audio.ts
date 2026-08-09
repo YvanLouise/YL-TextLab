@@ -6,6 +6,7 @@ import {
   type AudioChannels,
   type AudioConversionOptions,
   type AudioInputFormat,
+  type AudioMetadata,
   type AudioOutputFormat,
   type AudioQualityPreset,
   type AudioSampleRate,
@@ -77,6 +78,14 @@ const oggQuality: Record<AudioQualityPreset, string> = {
   compact: '3',
   standard: '5',
   high: '7',
+}
+
+const customBitrateRanges: Partial<Record<AudioOutputFormat, { min: number; max: number; step: number }>> = {
+  mp3: { min: 64, max: 320, step: 16 },
+  m4a: { min: 64, max: 320, step: 16 },
+  aac: { min: 64, max: 320, step: 16 },
+  ogg: { min: 64, max: 320, step: 16 },
+  opus: { min: 32, max: 320, step: 16 },
 }
 
 function matches(bytes: Uint8Array, offset: number, values: number[]) {
@@ -152,11 +161,45 @@ export function outputFileName(fileName: string, format: AudioOutputFormat) {
   return `${cleanBase}.${outputExtension(format)}`
 }
 
-export function qualityLabel(format: AudioOutputFormat, preset: AudioQualityPreset) {
+export function bitrateRange(format: AudioOutputFormat) {
+  return customBitrateRanges[format] ?? null
+}
+
+export function effectiveBitrateKbps(options: AudioConversionOptions) {
+  const range = bitrateRange(options.format)
+  if (!range) return null
+  if (options.qualityMode === 'custom') {
+    return Math.max(range.min, Math.min(range.max, Math.round(options.customBitrateKbps)))
+  }
+  if (options.format === 'ogg') {
+    return { compact: 112, standard: 160, high: 224 }[options.quality]
+  }
+  const value = bitrateByFormat[options.format]?.[options.quality]
+  return value ? Number.parseInt(value, 10) : null
+}
+
+export function qualityLabel(
+  format: AudioOutputFormat,
+  preset: AudioQualityPreset,
+  customBitrateKbps?: number,
+) {
   if (format === 'wav') return 'PCM 16-bit'
   if (format === 'flac') return '无损'
+  if (customBitrateKbps !== undefined) return `${customBitrateKbps}k`
   if (format === 'ogg') return `Vorbis Q${oggQuality[preset]}`
   return bitrateByFormat[format]?.[preset] ?? '标准'
+}
+
+export function estimateAudioOutputSize(durationSeconds: number | null, options: AudioConversionOptions) {
+  if (durationSeconds === null || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return null
+  if (options.format === 'flac') return null
+  if (options.format === 'wav') {
+    const sampleRate = options.sampleRate === 'original' ? 44100 : options.sampleRate
+    const channels = options.channels === 'mono' ? 1 : 2
+    return Math.ceil(durationSeconds * sampleRate * channels * 2 + 44)
+  }
+  const bitrate = effectiveBitrateKbps(options)
+  return bitrate ? Math.ceil(durationSeconds * bitrate * 1000 / 8 * 1.02) : null
 }
 
 function commonAudioArgs(sampleRate: AudioSampleRate, channels: AudioChannels) {
@@ -167,14 +210,16 @@ function commonAudioArgs(sampleRate: AudioSampleRate, channels: AudioChannels) {
 }
 
 function codecArgs(options: AudioConversionOptions) {
-  const bitrate = bitrateByFormat[options.format]?.[options.quality]
+  const bitrate = `${effectiveBitrateKbps(options)}k`
   switch (options.format) {
     case 'mp3': return ['-c:a', 'libmp3lame', '-b:a', bitrate!, '-id3v2_version', '3']
     case 'wav': return ['-c:a', 'pcm_s16le']
     case 'flac': return ['-c:a', 'flac', '-compression_level', '5']
     case 'm4a': return ['-c:a', 'aac', '-b:a', bitrate!, '-movflags', '+faststart']
     case 'aac': return ['-c:a', 'aac', '-b:a', bitrate!, '-f', 'adts']
-    case 'ogg': return ['-c:a', 'libvorbis', '-q:a', oggQuality[options.quality]]
+    case 'ogg': return options.qualityMode === 'custom'
+      ? ['-c:a', 'libvorbis', '-b:a', bitrate]
+      : ['-c:a', 'libvorbis', '-q:a', oggQuality[options.quality]]
     case 'opus': return ['-c:a', 'libopus', '-b:a', bitrate!, '-vbr', 'on']
   }
 }
@@ -183,20 +228,46 @@ export function supportsCoverArt(format: AudioOutputFormat) {
   return format === 'mp3' || format === 'm4a' || format === 'flac'
 }
 
+interface AudioCommandExtras {
+  metadata?: AudioMetadata
+  coverPath?: string | null
+  includeCover?: boolean
+}
+
+const metadataKeys: Array<[keyof AudioMetadata, string]> = [
+  ['title', 'title'],
+  ['artist', 'artist'],
+  ['album', 'album'],
+  ['year', 'date'],
+  ['track', 'track'],
+  ['genre', 'genre'],
+  ['comment', 'comment'],
+]
+
 export function buildAudioCommand(
   inputPath: string,
   outputPath: string,
   options: AudioConversionOptions,
-  includeCover = supportsCoverArt(options.format),
+  extras: AudioCommandExtras = {},
 ) {
-  const args = ['-i', inputPath, '-map', '0:a:0']
+  const includeCover = extras.includeCover ?? supportsCoverArt(options.format)
+  const coverPath = includeCover ? extras.coverPath : null
+  const args = ['-i', inputPath]
+  if (coverPath) args.push('-i', coverPath)
+  args.push('-map', '0:a:0')
   if (includeCover) {
-    args.push('-map', '0:v:0?', '-c:v', 'copy', '-disposition:v:0', 'attached_pic')
+    args.push('-map', coverPath ? '1:v:0' : '0:v:0?', '-c:v', 'copy', '-disposition:v:0', 'attached_pic')
   } else {
     args.push('-vn')
   }
   if (options.preserveMetadata) args.push('-map_metadata', '0')
   else args.push('-map_metadata', '-1')
+  if (extras.metadata) {
+    for (const [field, ffmpegKey] of metadataKeys) {
+      const value = extras.metadata[field].trim()
+      if (value) args.push('-metadata', `${ffmpegKey}=${value}`)
+    }
+  }
   args.push(...codecArgs(options), ...commonAudioArgs(options.sampleRate, options.channels), outputPath)
   return args
 }

@@ -12,12 +12,25 @@ export type AudioInputFormat =
 export type AudioOutputFormat = Exclude<AudioInputFormat, 'wma' | 'aiff'>
 
 export type AudioQualityPreset = 'compact' | 'standard' | 'high'
+export type AudioQualityMode = 'preset' | 'custom'
 export type AudioSampleRate = 'original' | 44100 | 48000
 export type AudioChannels = 'original' | 'mono' | 'stereo'
+
+export interface AudioMetadata {
+  title: string
+  artist: string
+  album: string
+  year: string
+  track: string
+  genre: string
+  comment: string
+}
 
 export interface AudioConversionOptions {
   format: AudioOutputFormat
   quality: AudioQualityPreset
+  qualityMode: AudioQualityMode
+  customBitrateKbps: number
   sampleRate: AudioSampleRate
   channels: AudioChannels
   preserveMetadata: boolean
@@ -26,6 +39,8 @@ export interface AudioConversionOptions {
 export interface AudioConversionRequest {
   file: File
   options: AudioConversionOptions
+  metadata: AudioMetadata
+  coverFile: File | null
 }
 
 export interface AudioConversionResult {
@@ -54,6 +69,10 @@ export interface AudioQueueItem {
   error: string | null
   result: AudioConversionResult | null
   resultUrl: string | null
+  metadata: AudioMetadata
+  metadataExpanded: boolean
+  coverFile: File | null
+  coverUrl: string | null
 }
 
 export interface AudioConversionEngine {
@@ -81,9 +100,21 @@ export class AudioConversionError extends Error {
 export const DEFAULT_AUDIO_OPTIONS: AudioConversionOptions = {
   format: 'mp3',
   quality: 'standard',
+  qualityMode: 'preset',
+  customBitrateKbps: 192,
   sampleRate: 'original',
   channels: 'original',
   preserveMetadata: true,
+}
+
+export const EMPTY_AUDIO_METADATA: AudioMetadata = {
+  title: '',
+  artist: '',
+  album: '',
+  year: '',
+  track: '',
+  genre: '',
+  comment: '',
 }
 
 export const MAX_AUDIO_FILES = 20

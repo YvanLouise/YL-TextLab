@@ -19,6 +19,7 @@ import {
   RefreshCw,
   RotateCw,
   ScanText,
+  Scissors,
   Search,
   Settings2,
   ShieldCheck,
@@ -33,7 +34,7 @@ import { Footer } from '../components/Footer'
 import { SiteHeader } from '../components/SiteHeader'
 import styles from './FeaturesPage.module.css'
 
-type ToolId = 'replace' | 'pdf' | 'image' | 'audio'
+type ToolId = 'replace' | 'pdf' | 'image' | 'audio' | 'audioSplit'
 
 interface ToolNavigationItem {
   id: ToolId
@@ -46,6 +47,7 @@ const liveTools: ToolNavigationItem[] = [
   { id: 'pdf', title: 'PDF 查看', icon: FileText },
   { id: 'image', title: '图片格式转换', icon: Images },
   { id: 'audio', title: '音频格式转换', icon: Music2 },
+  { id: 'audioSplit', title: '音频分割与提取', icon: Scissors },
 ]
 
 const plannedTools = [
@@ -132,6 +134,19 @@ const audioCapabilities = [
   { title: '实用参数', description: '按格式设置质量，并可调整采样率与声道。', icon: Settings2 },
   { title: '标签与封面', description: '尽力保留歌曲标签，以及目标容器兼容的封面。', icon: FileText },
   { title: '本地隐私', description: '音频不会上传，也不会保存在浏览器草稿中。', icon: LockKeyhole },
+]
+
+const audioSplitWorkflow = [
+  { title: '添加媒体', description: '选择需要截取的音频，或需要提取音轨的视频。', icon: UploadCloud },
+  { title: '选择区域', description: '拖动波形边界，或输入精确的开始与结束时间。', icon: Scissors },
+  { title: '试听导出', description: '试听所选区域，并导出原格式、MP3 或 WAV。', icon: Download },
+]
+
+const audioSplitCapabilities = [
+  { title: '波形选择', description: '在可视化波形上直接调整片段范围。', icon: Scissors },
+  { title: '精确时间', description: '支持毫秒级开始时间、结束时间和时长显示。', icon: Settings2 },
+  { title: '视频音轨', description: '从 MP4、MOV、WebM、MKV、AVI 中提取指定音频区域。', icon: Music2 },
+  { title: '本地隐私', description: '音视频只在浏览器本地处理，不会上传服务器。', icon: LockKeyhole },
 ]
 
 function ToolNavigation({ selected, onSelect }: { selected: ToolId; onSelect: (id: ToolId) => void }) {
@@ -367,6 +382,48 @@ function AudioFeature() {
   )
 }
 
+function AudioSplitFeature() {
+  return (
+    <div className={styles.featureContent}>
+      <header className={styles.featureHeader}>
+        <span className={styles.featureIcon}><Scissors aria-hidden="true" /></span>
+        <div>
+          <h2>音频分割与提取</h2>
+          <p>截取音频指定区域，或从视频中提取所选时间范围的音轨。</p>
+        </div>
+        <Link className="button button-primary" to="/audio-split">
+          打开工具 <ArrowRight aria-hidden="true" />
+        </Link>
+      </header>
+
+      <section className={`${styles.pdfPreview} ${styles.imagePreview}`} aria-labelledby="audio-split-preview-title">
+        <span className={styles.pdfDocumentIcon}><Scissors aria-hidden="true" /></span>
+        <h3 id="audio-split-preview-title">可视化选择音视频区域</h3>
+        <p>拖动波形边界或输入毫秒级时间，导出前可直接试听所选音轨。</p>
+        <div className={styles.formatPreview} aria-label="音频分割能力">
+          {['波形选择', '精确时间', '视频音轨', 'MP3', 'WAV'].map((item) => <span key={item}>{item}</span>)}
+        </div>
+        <Link className="button button-primary" to="/audio-split"><Scissors aria-hidden="true" /> 选择音视频</Link>
+      </section>
+
+      <Workflow items={audioSplitWorkflow} />
+
+      <section className={styles.detailList} aria-labelledby="audio-split-capability-title">
+        <header><Scissors aria-hidden="true" /><h2 id="audio-split-capability-title">分割能力</h2></header>
+        <div className={styles.detailRows}>
+          {audioSplitCapabilities.map(({ title, description, icon: Icon }) => (
+            <article key={title}>
+              <span className={styles.ruleIcon}><Icon aria-hidden="true" /></span>
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
 export function FeaturesPage() {
   const [selectedTool, setSelectedTool] = useState<ToolId>('replace')
 
@@ -377,7 +434,7 @@ export function FeaturesPage() {
         <div className={`page-shell ${styles.workspace}`}>
           <section className={styles.hero}>
             <h1>功能中心</h1>
-            <p>关键词替换、PDF 查看、图片与音频格式转换均已上线，更多实用功能持续完善中。</p>
+            <p>关键词替换、PDF 查看、图片转换、音频转换与分割均已上线。</p>
           </section>
           <ToolNavigation selected={selectedTool} onSelect={setSelectedTool} />
           {selectedTool === 'replace'
@@ -386,7 +443,9 @@ export function FeaturesPage() {
               ? <PdfFeature />
               : selectedTool === 'image'
                 ? <ImageFeature />
-                : <AudioFeature />}
+                : selectedTool === 'audio'
+                  ? <AudioFeature />
+                  : <AudioSplitFeature />}
         </div>
       </main>
       <Footer />

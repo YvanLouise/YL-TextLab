@@ -17,9 +17,9 @@ const onePixelPng = Buffer.from(
   'base64',
 )
 
-function createTinyWav() {
+function createTinyWav(durationSeconds = 0.1) {
   const sampleRate = 8000
-  const sampleCount = 800
+  const sampleCount = Math.round(sampleRate * durationSeconds)
   const dataSize = sampleCount * 2
   const buffer = Buffer.alloc(44 + dataSize)
   buffer.write('RIFF', 0)
@@ -114,6 +114,10 @@ test('features page presents live and planned tools', async ({ page }) => {
   await page.getByRole('button', { name: '音频格式转换' }).click()
   await expect(page.getByRole('heading', { name: '音频格式转换', level: 2 })).toBeVisible()
   await expect(page.getByRole('heading', { name: '音频能力' })).toBeVisible()
+
+  await page.getByRole('button', { name: '音频分割与提取' }).click()
+  await expect(page.getByRole('heading', { name: '音频分割与提取', level: 2 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '分割能力' })).toBeVisible()
 })
 
 test('opens and controls a local PDF from the features page', async ({ page }) => {
@@ -190,8 +194,20 @@ test('converts a local WAV to MP3 without uploading audio', async ({ page, isMob
   const bodyWidth = await page.locator('body').evaluate((element) => element.scrollWidth)
   const viewportWidth = page.viewportSize()?.width ?? 0
   expect(bodyWidth).toBeLessThanOrEqual(viewportWidth)
-  if (isMobile) return
+  if (isMobile) {
+    await page.getByRole('button', { name: '自定义码率' }).click()
+    await page.getByRole('button', { name: '编辑 tone.wav 的歌曲信息' }).click()
+    await page.getByLabel('歌曲标题').fill('手机端测试')
+    const expandedBodyWidth = await page.locator('body').evaluate((element) => element.scrollWidth)
+    expect(expandedBodyWidth).toBeLessThanOrEqual(viewportWidth)
+    return
+  }
 
+  await page.getByRole('button', { name: '自定义码率' }).click()
+  await page.getByLabel('码率数值').fill('160')
+  await page.getByRole('button', { name: '编辑 tone.wav 的歌曲信息' }).click()
+  await page.getByLabel('歌曲标题').fill('本地测试音频')
+  await page.getByRole('textbox', { name: '艺术家', exact: true }).fill('YL TextLab')
   await page.getByRole('button', { name: /开始转换/ }).click()
   await expect(page.getByText('1 个音频转换完成')).toBeVisible({ timeout: 120_000 })
 
@@ -220,5 +236,107 @@ test('converts a local WAV to MP3 without uploading audio', async ({ page, isMob
   await expect(page.getByText('2 / 20 个文件')).toBeVisible()
   await page.getByRole('button', { name: /开始转换/ }).click()
   await expect(page.getByText('2 个音频转换完成')).toBeVisible({ timeout: 120_000 })
+  expect(externalMutations).toEqual([])
+})
+
+test('selects and exports a local audio region', async ({ page, isMobile }) => {
+  const externalMutations: string[] = []
+  page.on('request', (request) => {
+    if (!['GET', 'HEAD'].includes(request.method())) externalMutations.push(request.url())
+  })
+
+  await page.goto('/audio-split')
+  await expect(page.getByRole('heading', { name: '音频分割与视频音轨提取', level: 1 })).toBeVisible()
+  await page.getByLabel('选择要处理的音频或视频文件').setInputFiles({
+    name: 'tone.wav',
+    mimeType: 'audio/wav',
+    buffer: createTinyWav(),
+  })
+  await expect(page.getByText('tone.wav')).toBeVisible()
+  await page.getByLabel('开始时间').fill('00:00.020')
+  await page.getByLabel('开始时间').press('Enter')
+  await page.getByLabel('结束时间').fill('00:00.080')
+  await page.getByLabel('结束时间').press('Enter')
+  await expect(page.getByLabel('片段时长')).toHaveValue('00:00.060')
+
+  const bodyWidth = await page.locator('body').evaluate((element) => element.scrollWidth)
+  const viewportWidth = page.viewportSize()?.width ?? 0
+  expect(bodyWidth).toBeLessThanOrEqual(viewportWidth)
+  if (isMobile) return
+
+  await page.getByRole('button', { name: '导出所选片段' }).click()
+  const downloadLink = page.getByRole('link', { name: '下载片段' })
+  await expect(downloadLink).toBeVisible({ timeout: 120_000 })
+  const download = page.waitForEvent('download')
+  await downloadLink.click()
+  const result = await download
+  const path = await result.path()
+  expect(path).not.toBeNull()
+  const output = await readFile(path!)
+  expect(output.subarray(0, 4).toString('ascii')).toBe('RIFF')
+  await result.delete()
+  expect(externalMutations).toEqual([])
+})
+
+test('extracts a selected audio region from a local video', async ({ page, isMobile }) => {
+  test.slow()
+  const externalMutations: string[] = []
+  page.on('request', (request) => {
+    if (!['GET', 'HEAD'].includes(request.method())) externalMutations.push(request.url())
+  })
+
+  await page.goto('/audio-convert')
+  await page.getByRole('button', { name: /M4A/ }).click()
+  await page.getByLabel('选择音频文件').setInputFiles({
+    name: 'source.wav',
+    mimeType: 'audio/wav',
+    buffer: createTinyWav(1),
+  })
+  await page.getByRole('button', { name: /开始转换/ }).click()
+  const sourceLink = page.getByRole('link', { name: '下载 source.m4a' })
+  await expect(sourceLink).toBeVisible({ timeout: 120_000 })
+  const sourceDownload = page.waitForEvent('download')
+  await sourceLink.click()
+  const sourceResult = await sourceDownload
+  const sourcePath = await sourceResult.path()
+  expect(sourcePath).not.toBeNull()
+  const video = await readFile(sourcePath!)
+  await sourceResult.delete()
+
+  await page.goto('/audio-split')
+  await page.getByLabel('选择要处理的音频或视频文件').setInputFiles({
+    name: 'clip.mp4',
+    mimeType: 'video/mp4',
+    buffer: video,
+  })
+  await expect(page.getByText('clip.mp4')).toBeVisible({ timeout: 120_000 })
+  await expect(page.getByText(/视频 · MP4/)).toBeVisible()
+  await expect(page.getByLabel('输出格式')).toHaveValue('mp3')
+  await expect(page.getByRole('option', { name: '保持原格式' })).toHaveCount(0)
+
+  await page.getByLabel('开始时间').fill('00:00.100')
+  await page.getByLabel('开始时间').press('Enter')
+  await page.getByLabel('结束时间').fill('00:00.500')
+  await page.getByLabel('结束时间').press('Enter')
+  await expect(page.getByLabel('片段时长')).toHaveValue('00:00.400')
+
+  const bodyWidth = await page.locator('body').evaluate((element) => element.scrollWidth)
+  expect(bodyWidth).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0)
+  if (isMobile) return
+
+  await page.getByRole('button', { name: '提取所选音频' }).click()
+  const downloadLink = page.getByRole('link', { name: '下载片段' })
+  await expect(downloadLink).toBeVisible({ timeout: 120_000 })
+  const download = page.waitForEvent('download')
+  await downloadLink.click()
+  const result = await download
+  expect(result.suggestedFilename()).toMatch(/\.mp3$/)
+  const path = await result.path()
+  expect(path).not.toBeNull()
+  const output = await readFile(path!)
+  const hasId3Header = output.subarray(0, 3).toString('ascii') === 'ID3'
+  const hasMp3Frame = output[0] === 0xff && (output[1] & 0xe0) === 0xe0
+  expect(hasId3Header || hasMp3Frame).toBe(true)
+  await result.delete()
   expect(externalMutations).toEqual([])
 })

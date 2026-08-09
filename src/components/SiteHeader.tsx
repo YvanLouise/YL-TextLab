@@ -10,6 +10,7 @@ const navigation = [
   { label: '功能', to: '/features' },
   { label: '图片转换', to: '/image-convert' },
   { label: '音频转换', to: '/audio-convert' },
+  { label: '音频分割', to: '/audio-split' },
   { label: '使用帮助', to: '/help' },
   { label: '更新日志', to: '/changelog' },
 ]

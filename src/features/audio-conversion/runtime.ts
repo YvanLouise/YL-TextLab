@@ -62,6 +62,7 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
     const inputPath = virtualName('input', request.file.name)
     const outputName = outputFileName(request.file.name, request.options.format)
     const outputPath = virtualName('output', outputName)
+    const coverPath = request.coverFile ? virtualName('cover', request.coverFile.name) : null
     const warnings: string[] = []
     let lastProgress = -1
     const progressHandler = ({ progress }: { progress: number }) => {
@@ -76,11 +77,23 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
 
     try {
       await ffmpeg.writeFile(inputPath, await fetchFile(request.file))
-      let exitCode = await ffmpeg.exec(buildAudioCommand(inputPath, outputPath, request.options))
+      const canEmbedCover = supportsCoverArt(request.options.format)
+      if (coverPath && request.coverFile && canEmbedCover) {
+        await ffmpeg.writeFile(coverPath, await fetchFile(request.coverFile))
+      } else if (request.coverFile) {
+        warnings.push(`${request.options.format.toUpperCase()} 不支持内嵌封面，已保留文本歌曲信息。`)
+      }
+      let exitCode = await ffmpeg.exec(buildAudioCommand(inputPath, outputPath, request.options, {
+        metadata: request.metadata,
+        coverPath: canEmbedCover ? coverPath : null,
+      }))
       if (exitCode !== 0 && supportsCoverArt(request.options.format)) {
         await safeDelete(ffmpeg, outputPath)
-        exitCode = await ffmpeg.exec(buildAudioCommand(inputPath, outputPath, request.options, false))
-        if (exitCode === 0) warnings.push('原文件封面与目标格式不兼容，已保留音频和文本标签。')
+        exitCode = await ffmpeg.exec(buildAudioCommand(inputPath, outputPath, request.options, {
+          metadata: request.metadata,
+          includeCover: false,
+        }))
+        if (exitCode === 0) warnings.push('封面与目标格式不兼容，已保留音频和文本歌曲信息。')
       }
       if (exitCode !== 0) {
         throw new AudioConversionError('TRANSCODE_FAILED', '转码器无法处理此文件或当前参数组合。')
@@ -99,7 +112,11 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
       }
     } finally {
       ffmpeg.off('progress', progressHandler)
-      await Promise.all([safeDelete(ffmpeg, inputPath), safeDelete(ffmpeg, outputPath)])
+      await Promise.all([
+        safeDelete(ffmpeg, inputPath),
+        safeDelete(ffmpeg, outputPath),
+        ...(coverPath ? [safeDelete(ffmpeg, coverPath)] : []),
+      ])
     }
   }
 

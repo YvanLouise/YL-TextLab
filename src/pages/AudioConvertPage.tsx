@@ -2,8 +2,11 @@ import {
   Archive,
   AudioLines,
   Check,
+  ChevronDown,
+  ChevronUp,
   Download,
   FileAudio,
+  FilePenLine,
   Gauge,
   Info,
   LoaderCircle,
@@ -23,7 +26,9 @@ import { ToolHeader } from '../components/SiteHeader'
 import {
   AUDIO_ACCEPT,
   OUTPUT_FORMATS,
+  bitrateRange,
   describeAudioError,
+  estimateAudioOutputSize,
   formatAudioDuration,
   inspectAudioFile,
   qualityLabel,
@@ -31,13 +36,16 @@ import {
 } from '../features/audio-conversion/audio'
 import {
   DEFAULT_AUDIO_OPTIONS,
+  EMPTY_AUDIO_METADATA,
   MAX_AUDIO_FILES,
   type AudioConversionEngine,
   type AudioConversionOptions,
   type AudioEngineFactory,
+  type AudioMetadata,
   type AudioQualityPreset,
   type AudioQueueItem,
 } from '../features/audio-conversion/types'
+import { AudioMetadataEditor } from './AudioMetadataEditor'
 import audioStyles from './AudioConvertPage.module.css'
 import styles from './ImageConvertPage.module.css'
 
@@ -110,6 +118,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
     itemsRef.current.forEach((item) => {
       URL.revokeObjectURL(item.sourceUrl)
       if (item.resultUrl) URL.revokeObjectURL(item.resultUrl)
+      if (item.coverUrl) URL.revokeObjectURL(item.coverUrl)
     })
   }, [])
 
@@ -157,6 +166,10 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
         error: null,
         result: null,
         resultUrl: null,
+        metadata: { ...EMPTY_AUDIO_METADATA },
+        metadataExpanded: false,
+        coverFile: null,
+        coverUrl: null,
       }))
       setItems((current) => [...current, ...additions])
       setNotice(ignored
@@ -173,6 +186,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
       const target = current.find((item) => item.id === id)
       if (target) URL.revokeObjectURL(target.sourceUrl)
       if (target?.resultUrl) URL.revokeObjectURL(target.resultUrl)
+      if (target?.coverUrl) URL.revokeObjectURL(target.coverUrl)
       return current.filter((item) => item.id !== id)
     })
   }
@@ -181,10 +195,57 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
     items.forEach((item) => {
       URL.revokeObjectURL(item.sourceUrl)
       if (item.resultUrl) URL.revokeObjectURL(item.resultUrl)
+      if (item.coverUrl) URL.revokeObjectURL(item.coverUrl)
     })
     setItems([])
     if (fileInputRef.current) fileInputRef.current.value = ''
     setNotice('列表已清空，音频文件不会保留。')
+  }
+
+  const resetItemResult = (item: AudioQueueItem) => {
+    if (item.resultUrl) URL.revokeObjectURL(item.resultUrl)
+    return item.inputFormat
+      ? { ...item, status: 'queued' as const, progress: 0, error: null, result: null, resultUrl: null }
+      : item
+  }
+
+  const updateItemMetadata = (id: string, field: keyof AudioMetadata, value: string) => {
+    setItems((current) => current.map((item) => item.id === id
+      ? { ...resetItemResult(item), metadata: { ...item.metadata, [field]: value } }
+      : item))
+    setNotice('歌曲信息已更新，转换时会写入新标签。')
+  }
+
+  const updateItemCover = (id: string, file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      setNotice('封面图片不能超过 10 MB。')
+      return
+    }
+    setItems((current) => current.map((item) => {
+      if (item.id !== id) return item
+      if (item.coverUrl) URL.revokeObjectURL(item.coverUrl)
+      return {
+        ...resetItemResult(item),
+        coverFile: file,
+        coverUrl: URL.createObjectURL(file),
+      }
+    }))
+    setNotice('新封面已添加，支持封面的目标格式会优先写入。')
+  }
+
+  const removeItemCover = (id: string) => {
+    setItems((current) => current.map((item) => {
+      if (item.id !== id) return item
+      if (item.coverUrl) URL.revokeObjectURL(item.coverUrl)
+      return { ...resetItemResult(item), coverFile: null, coverUrl: null }
+    }))
+    setNotice('自定义封面已移除。')
+  }
+
+  const toggleMetadataEditor = (id: string) => {
+    setItems((current) => current.map((item) => item.id === id
+      ? { ...item, metadataExpanded: !item.metadataExpanded }
+      : item))
   }
 
   const getEngine = async () => {
@@ -222,7 +283,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
           : entry))
         try {
           const result = await engine.convert(
-            { file: item.file, options },
+            { file: item.file, options, metadata: item.metadata, coverFile: item.coverFile },
             (progress) => setItems((current) => current.map((entry) => entry.id === item.id
               ? { ...entry, progress }
               : entry)),
@@ -301,6 +362,11 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
 
   const completedCount = items.filter((item) => item.status === 'done').length
   const selectedFormat = OUTPUT_FORMATS.find((format) => format.value === options.format)!
+  const selectedBitrateRange = bitrateRange(options.format)
+  const estimatedBytes = items.reduce((total, item) => {
+    const estimate = estimateAudioOutputSize(item.duration, options)
+    return estimate === null ? total : total + estimate
+  }, 0)
   const busy = converting || engineLoading
 
   return (
@@ -344,18 +410,82 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
           </fieldset>
 
           <div className={audioStyles.settingGroup}>
-            <span>输出质量 <small className={audioStyles.presetValue}>{qualityLabel(options.format, options.quality)}</small></span>
-            <div className={audioStyles.presetGrid}>
-              {qualityPresets.map((preset) => (
-                <button
-                  type="button"
-                  aria-pressed={options.quality === preset.value}
-                  onClick={() => updateOptions({ quality: preset.value })}
-                  disabled={options.format === 'wav' || options.format === 'flac'}
-                  key={preset.value}
-                >{preset.label}</button>
-              ))}
-            </div>
+            <span>
+              质量与大小
+              <small className={audioStyles.presetValue}>
+                {qualityLabel(
+                  options.format,
+                  options.quality,
+                  options.qualityMode === 'custom' && selectedBitrateRange ? options.customBitrateKbps : undefined,
+                )}
+              </small>
+            </span>
+            {selectedBitrateRange ? (
+              <>
+                <div className={audioStyles.qualityMode} aria-label="质量控制方式">
+                  <button
+                    type="button"
+                    aria-pressed={options.qualityMode === 'preset'}
+                    onClick={() => updateOptions({ qualityMode: 'preset' })}
+                  >推荐档位</button>
+                  <button
+                    type="button"
+                    aria-pressed={options.qualityMode === 'custom'}
+                    onClick={() => updateOptions({ qualityMode: 'custom' })}
+                  >自定义码率</button>
+                </div>
+                {options.qualityMode === 'preset' ? (
+                  <div className={audioStyles.presetGrid}>
+                    {qualityPresets.map((preset) => (
+                      <button
+                        type="button"
+                        aria-pressed={options.quality === preset.value}
+                        onClick={() => updateOptions({ quality: preset.value })}
+                        key={preset.value}
+                      >{preset.label}</button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={audioStyles.bitrateControl}>
+                    <input
+                      type="range"
+                      aria-label="自定义码率"
+                      min={selectedBitrateRange.min}
+                      max={selectedBitrateRange.max}
+                      step={selectedBitrateRange.step}
+                      value={options.customBitrateKbps}
+                      onChange={(event) => updateOptions({ customBitrateKbps: Number(event.target.value) })}
+                    />
+                    <label>
+                      <input
+                        type="number"
+                        aria-label="码率数值"
+                        min={selectedBitrateRange.min}
+                        max={selectedBitrateRange.max}
+                        step={selectedBitrateRange.step}
+                        value={options.customBitrateKbps}
+                        onChange={(event) => {
+                          const value = Number(event.target.value)
+                          updateOptions({ customBitrateKbps: Math.max(selectedBitrateRange.min, Math.min(selectedBitrateRange.max, value)) })
+                        }}
+                      />
+                      <span>kbps</span>
+                    </label>
+                  </div>
+                )}
+                <p className={audioStyles.sizeEstimate}>
+                  {items.length && estimatedBytes
+                    ? `当前队列预计约 ${formatBytes(estimatedBytes)}，实际大小会因编码器和标签略有差异。`
+                    : '添加音频后，将根据歌曲时长估算输出大小。'}
+                </p>
+              </>
+            ) : (
+              <p className={audioStyles.sizeEstimate}>
+                {options.format === 'wav'
+                  ? `WAV 固定输出 PCM 16-bit${items.length && estimatedBytes ? `，当前队列预计约 ${formatBytes(estimatedBytes)}` : ''}。`
+                  : 'FLAC 固定无损输出，文件大小由原始音频内容决定。'}
+              </p>
+            )}
           </div>
 
           <div className={`${audioStyles.settingGroup} ${audioStyles.selectGrid}`}>
@@ -496,6 +626,16 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
                     ) : null}
                     {item.inputFormat && item.status !== 'converting' ? (
                       <div className={audioStyles.resultActions}>
+                        <button
+                          className={audioStyles.retryButton}
+                          type="button"
+                          aria-expanded={item.metadataExpanded}
+                          aria-label={`编辑 ${item.file.name} 的歌曲信息`}
+                          onClick={() => toggleMetadataEditor(item.id)}
+                        >
+                          <FilePenLine aria-hidden="true" /> 歌曲信息
+                          {item.metadataExpanded ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+                        </button>
                         {item.result && item.resultUrl ? (
                           <a href={item.resultUrl} download={item.result.fileName} aria-label={`下载 ${item.result.fileName}`}>
                             <Download aria-hidden="true" /> 下载
@@ -518,6 +658,17 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
                     <label>原音频<audio controls preload="metadata" src={item.sourceUrl} /></label>
                     {item.resultUrl ? <label>转换结果<audio controls preload="metadata" src={item.resultUrl} /></label> : null}
                   </div>
+                  {item.metadataExpanded ? (
+                    <AudioMetadataEditor
+                      itemName={item.file.name}
+                      metadata={item.metadata}
+                      coverUrl={item.coverUrl}
+                      disabled={busy}
+                      onChange={(field, value) => updateItemMetadata(item.id, field, value)}
+                      onCoverChange={(file) => updateItemCover(item.id, file)}
+                      onCoverRemove={() => removeItemCover(item.id)}
+                    />
+                  ) : null}
                 </article>
               ))}
             </div>

@@ -96,8 +96,9 @@ const imageFormats = [
 
 const audioFormats = [
   { title: '主流输出', badge: 'MP3', description: '支持输出 MP3、WAV、FLAC、M4A、AAC、OGG 与 Opus；WMA、AIFF 可作为输入。' },
-  { title: '质量参数', badge: 'HQ', description: '有损格式提供实用质量档位，并可选择保持原始、44.1 kHz 或 48 kHz 采样率。' },
-  { title: '标签与批量', badge: 'ZIP', description: '尽力保留标准歌曲标签，支持顺序转换、单项下载与 ZIP 打包。' },
+  { title: '质量与大小', badge: 'HQ', description: '有损格式支持推荐档位和自定义码率，并会按歌曲时长估算输出文件大小。' },
+  { title: '歌曲信息', badge: 'TAG', description: '可逐首修改标题、艺术家、专辑、年份、音轨、流派、备注与兼容封面。' },
+  { title: '批量转换', badge: 'ZIP', description: '支持顺序转换、进度反馈、单项下载与全部结果 ZIP 打包。' },
 ]
 
 export function HelpPage() {
@@ -199,12 +200,12 @@ export function HelpPage() {
               <article>
                 <CloudOff aria-hidden="true" />
                 <h3>不上传服务器</h3>
-                <p>文本、PDF、图片和音频始终只在当前浏览器本机处理。</p>
+                <p>文本、PDF、图片、音频和视频始终只在当前浏览器本机处理。</p>
               </article>
               <article>
                 <HardDrive aria-hidden="true" />
                 <h3>仅文本保存草稿</h3>
-                <p>关键词替换会保存本机草稿；PDF、图片和音频文件不会保存。</p>
+                <p>关键词替换会保存本机草稿；PDF、图片、音频和视频文件不会保存。</p>
               </article>
               <article>
                 <Trash2 aria-hidden="true" />

@@ -86,6 +86,36 @@ describe('AudioConvertPage', () => {
     )
   })
 
+  it('applies custom bitrate and per-track song information', async () => {
+    const user = userEvent.setup()
+    const engine = createEngine()
+    renderPage(engine)
+
+    fireEvent.change(screen.getByLabelText('选择音频文件'), {
+      target: { files: [audioFile('track.mp3')] },
+    })
+    await screen.findByText('等待转换')
+    await user.click(screen.getByRole('button', { name: '自定义码率' }))
+    fireEvent.change(screen.getByLabelText('自定义码率'), { target: { value: '224' } })
+    await user.click(screen.getByRole('button', { name: '编辑 track.mp3 的歌曲信息' }))
+    await user.type(screen.getByLabelText('歌曲标题'), '新的标题')
+    await user.type(screen.getByRole('textbox', { name: '艺术家' }), 'YvanLouise')
+    fireEvent.change(screen.getByLabelText('选择封面图片'), {
+      target: { files: [new File(['cover'], 'cover.png', { type: 'image/png' })] },
+    })
+    await user.click(screen.getByRole('button', { name: /开始转换/ }))
+
+    await screen.findByText('1 个音频转换完成')
+    expect(engine.convert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({ qualityMode: 'custom', customBitrateKbps: 224 }),
+        metadata: expect.objectContaining({ title: '新的标题', artist: 'YvanLouise' }),
+        coverFile: expect.objectContaining({ name: 'cover.png' }),
+      }),
+      expect.any(Function),
+    )
+  })
+
   it('continues a batch after one file fails and downloads successful results', async () => {
     const user = userEvent.setup()
     const convert = vi.fn()

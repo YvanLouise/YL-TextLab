@@ -12,6 +12,7 @@ import {
   Music2,
   RefreshCw,
   ScanText,
+  Scissors,
   ShieldCheck,
   Sparkles,
   Square,
@@ -68,7 +69,7 @@ export function HomePage() {
               <p>
                 YL文件工具箱是一款专注于文件处理的在线工具，
                 <br />
-                现已支持关键词替换、PDF 查看、图片与音频格式转换，未来将持续扩展更多实用功能。
+                现已支持关键词替换、PDF 查看、图片与音频处理，未来将持续扩展更多实用功能。
               </p>
             </div>
             <div className={styles.heroMedia} aria-hidden="true">
@@ -89,7 +90,7 @@ export function HomePage() {
           <div className="page-shell">
             <div className={styles.sectionHeading}>
               <h2 id="features-title">功能概览</h2>
-              <p>关键词替换、PDF 查看、图片与音频格式转换均已上线，更多功能正在开发中。</p>
+              <p>关键词替换、PDF 查看、图片转换、音频转换与分割均已上线。</p>
             </div>
             <div className={styles.featureGrid}>
               <article className={`${styles.featureCard} ${styles.activeCard}`}>
@@ -168,6 +169,25 @@ export function HomePage() {
                   ))}
                 </ul>
                 <Link className={styles.cardLink} to="/audio-convert">
+                  立即使用 <ArrowRight aria-hidden="true" />
+                </Link>
+              </article>
+
+              <article className={`${styles.featureCard} ${styles.activeCard}`}>
+                <div className={styles.cardTop}>
+                  <span className={`${styles.iconBox} ${styles.activeIcon}`}>
+                    <Scissors aria-hidden="true" />
+                  </span>
+                  <h3>音频分割与提取</h3>
+                  <span className={styles.onlineBadge}>已上线</span>
+                </div>
+                <p>截取音频片段，或从视频的指定时间区域提取音轨。</p>
+                <ul>
+                  {['音频与视频文件输入', '毫秒级开始与结束时间', '试听所选音频片段', 'MP3 / WAV 音轨提取'].map((item) => (
+                    <li key={item}><Check aria-hidden="true" /> {item}</li>
+                  ))}
+                </ul>
+                <Link className={styles.cardLink} to="/audio-split">
                   立即使用 <ArrowRight aria-hidden="true" />
                 </Link>
               </article>

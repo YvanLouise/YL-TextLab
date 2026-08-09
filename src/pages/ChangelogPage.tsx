@@ -38,6 +38,25 @@ export function ChangelogPage() {
           <article className={styles.release}>
             <aside className={styles.releaseMeta}>
               <span className={styles.timelineDot} />
+              <strong>v1.3.0</strong>
+              <time dateTime="2026-08-07">2026-08-07</time>
+              <span className={styles.releaseBadge}>音视频提取</span>
+            </aside>
+            <div className={styles.releaseNotes}>
+              <section>
+                <h2>新增</h2>
+                <ul>
+                  <li><Check /> 从 MP4、MOV、M4V、WebM、MKV、AVI 中提取指定区域音轨</li>
+                  <li><Check /> 视频音轨可按毫秒级时间选择并导出为 MP3 或 WAV</li>
+                  <li><Check /> 视频文件同样仅在浏览器本机处理，不上传服务器</li>
+                </ul>
+              </section>
+            </div>
+          </article>
+
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}>
+              <span className={styles.timelineDot} />
               <strong>v1.2.0</strong>
               <time dateTime="2026-07-29">2026-07-29</time>
               <span className={styles.releaseBadge}>音频工具</span>
@@ -48,7 +67,8 @@ export function ChangelogPage() {
                 <ul>
                   <li><Check /> MP3、WAV、FLAC、M4A、AAC、OGG 与 Opus 输出</li>
                   <li><Check /> WMA 与 AIFF 输入兼容，以及质量、采样率和声道设置</li>
-                  <li><Check /> 歌曲标签与兼容封面尽力保留</li>
+                  <li><Check /> 推荐档位、自定义码率与预计输出大小</li>
+                  <li><Check /> 可编辑歌曲标签与兼容封面，原始信息尽力保留</li>
                 </ul>
               </section>
               <section>

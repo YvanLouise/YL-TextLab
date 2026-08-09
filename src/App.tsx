@@ -15,6 +15,10 @@ const AudioConvertPage = lazy(() =>
   import('./pages/AudioConvertPage').then((module) => ({ default: module.AudioConvertPage })),
 )
 
+const AudioSplitPage = lazy(() =>
+  import('./pages/AudioSplitPage').then((module) => ({ default: module.AudioSplitPage })),
+)
+
 function RouteEffects() {
   const location = useLocation()
 
@@ -47,6 +51,10 @@ export default function App() {
         <Route
           path="/audio-convert"
           element={<Suspense fallback={<div className="page-shell">正在打开音频转换工具…</div>}><AudioConvertPage /></Suspense>}
+        />
+        <Route
+          path="/audio-split"
+          element={<Suspense fallback={<div className="page-shell">正在打开音频分割工具…</div>}><AudioSplitPage /></Suspense>}
         />
         <Route path="/help" element={<HelpPage />} />
         <Route path="/changelog" element={<ChangelogPage />} />

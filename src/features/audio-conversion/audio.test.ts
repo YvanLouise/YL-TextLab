@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildAudioCommand,
   detectAudioFormat,
+  effectiveBitrateKbps,
+  estimateAudioOutputSize,
   formatAudioDuration,
   outputFileName,
   outputMime,
@@ -53,9 +55,40 @@ describe('audio conversion helpers', () => {
     ]))
     expect(command).toContain('0:v:0?')
 
-    const fallback = buildAudioCommand('input.flac', 'output.mp3', DEFAULT_AUDIO_OPTIONS, false)
+    const fallback = buildAudioCommand('input.flac', 'output.mp3', DEFAULT_AUDIO_OPTIONS, { includeCover: false })
     expect(fallback).toContain('-vn')
     expect(fallback).not.toContain('0:v:0?')
+  })
+
+  it('supports custom bitrate and estimates output size from duration', () => {
+    const options = { ...DEFAULT_AUDIO_OPTIONS, qualityMode: 'custom' as const, customBitrateKbps: 224 }
+    expect(effectiveBitrateKbps(options)).toBe(224)
+    expect(buildAudioCommand('in.wav', 'out.mp3', options)).toEqual(expect.arrayContaining(['-b:a', '224k']))
+    expect(estimateAudioOutputSize(60, options)).toBeGreaterThan(1_700_000)
+    expect(estimateAudioOutputSize(60, { ...options, format: 'flac' })).toBeNull()
+  })
+
+  it('writes edited song information and an optional replacement cover', () => {
+    const command = buildAudioCommand('input.flac', 'output.mp3', DEFAULT_AUDIO_OPTIONS, {
+      metadata: {
+        title: '新标题',
+        artist: 'YL',
+        album: '本地专辑',
+        year: '2026',
+        track: '2/8',
+        genre: 'Pop',
+        comment: '仅在本机编辑',
+      },
+      coverPath: 'cover.png',
+    })
+    expect(command.slice(0, 4)).toEqual(['-i', 'input.flac', '-i', 'cover.png'])
+    expect(command).toEqual(expect.arrayContaining([
+      '-map', '1:v:0',
+      '-metadata', 'title=新标题',
+      '-metadata', 'artist=YL',
+      '-metadata', 'date=2026',
+      '-metadata', 'track=2/8',
+    ]))
   })
 
   it('uses lossless codecs and omits cover mapping for unsupported containers', () => {
