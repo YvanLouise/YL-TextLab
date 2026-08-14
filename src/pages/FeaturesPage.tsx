@@ -18,6 +18,7 @@ import {
   Music2,
   RefreshCw,
   RotateCw,
+  Rows3,
   ScanText,
   Scissors,
   Search,
@@ -34,7 +35,7 @@ import { Footer } from '../components/Footer'
 import { SiteHeader } from '../components/SiteHeader'
 import styles from './FeaturesPage.module.css'
 
-type ToolId = 'replace' | 'pdf' | 'image' | 'audio' | 'audioSplit'
+type ToolId = 'replace' | 'notionSplit' | 'pdf' | 'image' | 'audio' | 'audioSplit'
 
 interface ToolNavigationItem {
   id: ToolId
@@ -44,6 +45,7 @@ interface ToolNavigationItem {
 
 const liveTools: ToolNavigationItem[] = [
   { id: 'replace', title: '关键词替换', icon: Search },
+  { id: 'notionSplit', title: 'Notion 文本切分', icon: Rows3 },
   { id: 'pdf', title: 'PDF 查看', icon: FileText },
   { id: 'image', title: '图片格式转换', icon: Images },
   { id: 'audio', title: '音频格式转换', icon: Music2 },
@@ -97,6 +99,31 @@ const replacementRules = [
   },
 ]
 
+const notionSplitWorkflow = [
+  {
+    title: '粘贴长文本',
+    description: '将准备粘贴到 Notion 的长文本放入工具。',
+    icon: FileText,
+  },
+  {
+    title: '智能切分',
+    description: '按 UTF-8 字节上限，优先在段落与句子边界切分。',
+    icon: Rows3,
+  },
+  {
+    title: '逐段复制',
+    description: '按顺序复制每个片段，并依次粘贴到 Notion。',
+    icon: ClipboardCopy,
+  },
+]
+
+const notionSplitCapabilities = [
+  { title: '安全上限', description: '每个片段都不超过设定的 UTF-8 字节数，并可在 100–450 KB 间调整。', icon: Settings2 },
+  { title: '智能边界', description: '优先保留空行、换行、句末标点和单词边界。', icon: Rows3 },
+  { title: '完整保留', description: '不删减原文内容与换行，按顺序拼接即可还原原文。', icon: FileText },
+  { title: '本地隐私', description: '文本仅保存在本机浏览器，不上传服务器，可通过清空删除草稿。', icon: LockKeyhole },
+]
+
 const pdfWorkflow = [
   { title: '选择文件', description: '从本机选择需要阅读的 PDF。', icon: FolderOpen },
   { title: '本地解析', description: '浏览器直接解析，不上传文件。', icon: ShieldCheck },
@@ -125,7 +152,7 @@ const imageCapabilities = [
 
 const audioWorkflow = [
   { title: '添加音频', description: '选择单首音乐，或拖拽多个文件加入队列。', icon: UploadCloud },
-  { title: '设置质量', description: '选择格式、质量、采样率、声道与标签保留。', icon: Settings2 },
+  { title: '设置处理方式', description: '转换格式与质量，或仅修改信息并保持原音质。', icon: Settings2 },
   { title: '试听下载', description: '逐项试听与下载，或将结果打包为 ZIP。', icon: Archive },
 ]
 
@@ -133,6 +160,7 @@ const audioCapabilities = [
   { title: '主流格式', description: '输出 MP3、WAV、FLAC、M4A、AAC、OGG 与 Opus。', icon: Music2 },
   { title: '实用参数', description: '按格式设置质量，并可调整采样率与声道。', icon: Settings2 },
   { title: '标签与封面', description: '尽力保留歌曲标签，以及目标容器兼容的封面。', icon: FileText },
+  { title: '原音质编辑', description: '使用音频流复制，只修改歌曲信息，不重新编码。', icon: FileText },
   { title: '本地隐私', description: '音频不会上传，也不会保存在浏览器草稿中。', icon: LockKeyhole },
 ]
 
@@ -259,6 +287,62 @@ function ReplacementFeature() {
   )
 }
 
+function NotionSplitFeature() {
+  return (
+    <div className={styles.featureContent}>
+      <header className={styles.featureHeader}>
+        <span className={styles.featureIcon}><Rows3 aria-hidden="true" /></span>
+        <div>
+          <h2>Notion 文本切分</h2>
+          <p>将超长文本自动拆分为安全片段，方便逐段复制并粘贴到 Notion。</p>
+        </div>
+        <Link className="button button-primary" to="/notion-split">
+          打开工具 <ArrowRight aria-hidden="true" />
+        </Link>
+      </header>
+
+      <section className={styles.transformPreview} aria-labelledby="notion-preview-title">
+        <h3 id="notion-preview-title" className="sr-only">Notion 文本切分效果预览</h3>
+        <article className={`${styles.previewDocument} ${styles.sourceDocument}`}>
+          <header><FileText aria-hidden="true" /><strong>超长文本（示例）</strong></header>
+          <div className={styles.previewText}>
+            <p>长篇笔记包含多个段落、句子与换行，需要分多次粘贴到 Notion 中。</p>
+            <p>工具会保留原有内容，并在自然边界处自动生成安全片段。</p>
+          </div>
+          <footer><span>原文字符数：<strong>5,460</strong></span></footer>
+        </article>
+
+        <span className={styles.transformArrow} aria-hidden="true"><ArrowRight /><ArrowDown /></span>
+
+        <article className={`${styles.previewDocument} ${styles.resultDocument}`}>
+          <header><Rows3 aria-hidden="true" /><strong>切分结果（预览）</strong></header>
+          <div className={styles.previewText}>
+            <p><strong>片段 1：</strong>保留完整段落与句子边界</p>
+            <p><strong>片段 2：</strong>低于设定的 UTF-8 字节上限</p>
+            <p><strong>片段 3：</strong>可按顺序独立复制使用</p>
+          </div>
+          <footer><span className={styles.completed}><Check aria-hidden="true" /> 已生成 3 个安全片段</span></footer>
+        </article>
+      </section>
+
+      <Workflow items={notionSplitWorkflow} />
+
+      <section className={styles.detailList} aria-labelledby="notion-capability-title">
+        <header><Rows3 aria-hidden="true" /><h2 id="notion-capability-title">切分能力</h2></header>
+        <div className={styles.detailRows}>
+          {notionSplitCapabilities.map(({ title, description, icon: Icon }) => (
+            <article key={title}>
+              <span className={styles.ruleIcon}><Icon aria-hidden="true" /></span>
+              <h3>{title}</h3>
+              <p>{description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function PdfFeature() {
   return (
     <div className={styles.featureContent}>
@@ -347,7 +431,7 @@ function AudioFeature() {
         <span className={styles.featureIcon}><Music2 aria-hidden="true" /></span>
         <div>
           <h2>音频格式转换</h2>
-          <p>批量转换常用音乐格式，设置质量参数并尽力保留歌曲标签。</p>
+          <p>批量转换常用音乐格式，也可保持原音质仅修改歌曲信息。</p>
         </div>
         <Link className="button button-primary" to="/audio-convert">
           打开工具 <ArrowRight aria-hidden="true" />
@@ -434,18 +518,20 @@ export function FeaturesPage() {
         <div className={`page-shell ${styles.workspace}`}>
           <section className={styles.hero}>
             <h1>功能中心</h1>
-            <p>关键词替换、PDF 查看、图片转换、音频转换与分割均已上线。</p>
+            <p>关键词替换、Notion 文本切分、PDF 查看、图片转换、音频转换与分割均已上线。</p>
           </section>
           <ToolNavigation selected={selectedTool} onSelect={setSelectedTool} />
           {selectedTool === 'replace'
             ? <ReplacementFeature />
-            : selectedTool === 'pdf'
-              ? <PdfFeature />
-              : selectedTool === 'image'
-                ? <ImageFeature />
-                : selectedTool === 'audio'
-                  ? <AudioFeature />
-                  : <AudioSplitFeature />}
+            : selectedTool === 'notionSplit'
+              ? <NotionSplitFeature />
+              : selectedTool === 'pdf'
+                ? <PdfFeature />
+                : selectedTool === 'image'
+                  ? <ImageFeature />
+                  : selectedTool === 'audio'
+                    ? <AudioFeature />
+                    : <AudioSplitFeature />}
         </div>
       </main>
       <Footer />

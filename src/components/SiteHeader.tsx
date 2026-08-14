@@ -8,6 +8,7 @@ import styles from './SiteHeader.module.css'
 const navigation = [
   { label: '首页', to: '/' },
   { label: '功能', to: '/features' },
+  { label: 'Notion 切分', to: '/notion-split' },
   { label: '图片转换', to: '/image-convert' },
   { label: '音频转换', to: '/audio-convert' },
   { label: '音频分割', to: '/audio-split' },
@@ -110,7 +111,15 @@ export function SiteHeader() {
   )
 }
 
-export function ToolHeader({ toolName }: { toolName: string }) {
+export function ToolHeader({
+  toolName,
+  wide = false,
+  showMobileTheme = false,
+}: {
+  toolName: string
+  wide?: boolean
+  showMobileTheme?: boolean
+}) {
   const [menuOpen, setMenuOpen] = useState(false)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
 
@@ -132,14 +141,14 @@ export function ToolHeader({ toolName }: { toolName: string }) {
   return (
     <>
       <header className={`${styles.header} ${styles.toolHeader}`}>
-        <div className={`page-shell ${styles.inner}`}>
+        <div className={`page-shell ${styles.inner} ${wide ? styles.wideInner : ''}`}>
           <div className={styles.toolBranding}>
             <Brand />
             <span className={styles.divider} aria-hidden="true" />
             <span className={styles.toolName}>{toolName}</span>
           </div>
           <div className={styles.toolActions}>
-            <span className={styles.toolTheme}>
+            <span className={`${styles.toolTheme} ${showMobileTheme ? styles.mobileToolTheme : ''}`}>
               <ThemeButton />
             </span>
             <button

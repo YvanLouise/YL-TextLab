@@ -5,6 +5,7 @@ import {
   effectiveBitrateKbps,
   estimateAudioOutputSize,
   formatAudioDuration,
+  metadataOutputFileName,
   outputFileName,
   outputMime,
   qualityLabel,
@@ -33,6 +34,8 @@ describe('audio conversion helpers', () => {
     expect(outputFileName('  .wav', 'flac')).toBe('audio.flac')
     expect(outputMime('mp3')).toBe('audio/mpeg')
     expect(outputMime('opus')).toContain('opus')
+    expect(outputMime('wma')).toBe('audio/x-ms-wma')
+    expect(metadataOutputFileName('demo/song.WMA', 'wma')).toBe('demo_song-已编辑.wma')
   })
 
   it('maps practical quality presets per codec', () => {
@@ -89,6 +92,28 @@ describe('audio conversion helpers', () => {
       '-metadata', 'date=2026',
       '-metadata', 'track=2/8',
     ]))
+  })
+
+  it('copies the original audio stream when only editing song information', () => {
+    const options = { ...DEFAULT_AUDIO_OPTIONS, mode: 'metadata-only' as const }
+    const command = buildAudioCommand('input.mp3', 'output.mp3', options, {
+      outputFormat: 'mp3',
+      metadata: {
+        title: '仅修改标题',
+        artist: '',
+        album: '',
+        year: '',
+        track: '',
+        genre: '',
+        comment: '',
+      },
+    })
+    expect(command).toEqual(expect.arrayContaining(['-c:a', 'copy', '-metadata', 'title=仅修改标题']))
+    expect(command).not.toContain('libmp3lame')
+    expect(command).not.toContain('-b:a')
+    expect(command).not.toContain('-ar')
+    expect(command).not.toContain('-ac')
+    expect(estimateAudioOutputSize(60, options)).toBeNull()
   })
 
   it('uses lossless codecs and omits cover mapping for unsupported containers', () => {

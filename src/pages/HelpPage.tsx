@@ -1,7 +1,6 @@
 import {
   ArrowRight,
   ArrowRightLeft,
-  CheckCircle2,
   ClipboardPaste,
   CloudOff,
   Copy,
@@ -13,6 +12,7 @@ import {
   ListChecks,
   Music2,
   Palette,
+  Rows3,
   Search,
   Settings2,
   ShieldCheck,
@@ -67,8 +67,16 @@ const faqs = [
     answer: '可以。你可以在结果区继续修改后复制；再次执行替换时会根据原文重新生成结果。',
   },
   {
+    question: 'Notion 文本切分会改变或遗漏原文吗？',
+    answer: '不会。片段会完整保留原文内容和换行，按顺序拼接所有片段即可还原原文。',
+  },
+  {
+    question: '为什么有些片段没有达到字节上限？',
+    answer: '工具会优先在段落、换行和句末标点处切分，以减少句子被截断的情况。',
+  },
+  {
     question: '如何彻底删除本机草稿？',
-    answer: '点击替换工具中的“清空”，页面内容和浏览器本机保存的草稿会同时删除。',
+    answer: '点击关键词替换或 Notion 切分工具中的“清空”，页面内容和对应的本机草稿会同时删除。',
   },
   {
     question: 'GIF 转换后为什么没有动画？',
@@ -97,8 +105,14 @@ const imageFormats = [
 const audioFormats = [
   { title: '主流输出', badge: 'MP3', description: '支持输出 MP3、WAV、FLAC、M4A、AAC、OGG 与 Opus；WMA、AIFF 可作为输入。' },
   { title: '质量与大小', badge: 'HQ', description: '有损格式支持推荐档位和自定义码率，并会按歌曲时长估算输出文件大小。' },
-  { title: '歌曲信息', badge: 'TAG', description: '可逐首修改标题、艺术家、专辑、年份、音轨、流派、备注与兼容封面。' },
+  { title: '歌曲信息', badge: 'TAG', description: '可选择“仅修改信息”保持原格式和音质，逐首更新标题、艺术家、专辑、年份、音轨、流派、备注与兼容封面。' },
   { title: '批量转换', badge: 'ZIP', description: '支持顺序转换、进度反馈、单项下载与全部结果 ZIP 打包。' },
+]
+
+const notionSplitFeatures = [
+  { title: '安全切分', badge: 'SAFE', description: '按 UTF-8 字节计算，每个片段都不超过设定上限，避免再次触发单次粘贴限制。' },
+  { title: '智能边界', badge: 'TEXT', description: '优先沿空行、换行、句末标点和单词边界切分，尽量保持内容连贯。' },
+  { title: '逐段复制', badge: 'COPY', description: '每个片段都可独立复制并记录完成状态，方便按顺序粘贴到 Notion。' },
 ]
 
 export function HelpPage() {
@@ -111,6 +125,7 @@ export function HelpPage() {
             <HelpCircle aria-hidden="true" /> 使用帮助
           </div>
           <a href="#quick-start">快速开始</a>
+          <a href="#notion-split">Notion 文本切分</a>
           <a href="#image-convert">图片格式转换</a>
           <a href="#audio-convert">音频格式转换</a>
           <a href="#matching">匹配选项说明</a>
@@ -128,7 +143,7 @@ export function HelpPage() {
           <header className={styles.pageIntro}>
             <div>
               <h1>使用帮助</h1>
-              <p>快速了解关键词替换、PDF、图片与音频工具及本机隐私机制。</p>
+              <p>快速了解文本、PDF、图片与音频工具及本机隐私机制。</p>
             </div>
             <img
               src={`${import.meta.env.BASE_URL}assets/help-illustration.png`}
@@ -147,6 +162,19 @@ export function HelpPage() {
                   <h3>{title}</h3>
                   <p>{description}</p>
                   {index < steps.length - 1 ? <ArrowRight className={styles.stepArrow} /> : null}
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section id="notion-split" className={styles.section}>
+            <h2>Notion 文本切分</h2>
+            <p className={styles.sectionLead}>粘贴长文本后自动生成安全片段，再按顺序逐段复制到 Notion。</p>
+            <div className={styles.optionCards}>
+              {notionSplitFeatures.map((feature) => (
+                <article key={feature.title}>
+                  <span>{feature.badge}</span>
+                  <div><h3>{feature.title}</h3><p>{feature.description}</p></div>
                 </article>
               ))}
             </div>
@@ -205,7 +233,7 @@ export function HelpPage() {
               <article>
                 <HardDrive aria-hidden="true" />
                 <h3>仅文本保存草稿</h3>
-                <p>关键词替换会保存本机草稿；PDF、图片、音频和视频文件不会保存。</p>
+                <p>关键词替换和 Notion 切分文本仅保存在本机浏览器；PDF、图片、音频与视频不会保存草稿。</p>
               </article>
               <article>
                 <Trash2 aria-hidden="true" />
@@ -250,21 +278,21 @@ export function HelpPage() {
 
           <section className={styles.ctaBand}>
             <span>
-              <CheckCircle2 aria-hidden="true" />
+              <Rows3 aria-hidden="true" />
             </span>
             <div>
-              <h2>准备好转换音频了吗？</h2>
-              <p>添加单首或多首音频，在本机完成格式转换。</p>
+              <h2>准备好切分长文本了吗？</h2>
+              <p>粘贴内容后自动生成安全片段，并逐段复制到 Notion。</p>
             </div>
-            <Link className="button button-primary" to="/audio-convert">
-              打开音频转换工具 <ArrowRight aria-hidden="true" />
+            <Link className="button button-primary" to="/notion-split">
+              打开 Notion 切分工具 <ArrowRight aria-hidden="true" />
             </Link>
           </section>
         </div>
       </main>
       <Footer />
       <span className="sr-only">
-        <FileText /> <ListChecks /> <ArrowRightLeft /> <Images /> <Layers3 /> <Music2 />
+        <FileText /> <ListChecks /> <ArrowRightLeft /> <Images /> <Layers3 /> <Music2 /> <Rows3 />
       </span>
     </div>
   )

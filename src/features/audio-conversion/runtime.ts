@@ -4,6 +4,7 @@ import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile } from '@ffmpeg/util'
 import {
   buildAudioCommand,
+  metadataOutputFileName,
   outputFileName,
   outputMime,
   supportsCoverArt,
@@ -60,7 +61,12 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
 
     const startedAt = performance.now()
     const inputPath = virtualName('input', request.file.name)
-    const outputName = outputFileName(request.file.name, request.options.format)
+    const outputFormat = request.options.mode === 'metadata-only'
+      ? request.inputFormat
+      : request.options.format
+    const outputName = request.options.mode === 'metadata-only'
+      ? metadataOutputFileName(request.file.name, outputFormat)
+      : outputFileName(request.file.name, request.options.format)
     const outputPath = virtualName('output', outputName)
     const coverPath = request.coverFile ? virtualName('cover', request.coverFile.name) : null
     const warnings: string[] = []
@@ -77,21 +83,23 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
 
     try {
       await ffmpeg.writeFile(inputPath, await fetchFile(request.file))
-      const canEmbedCover = supportsCoverArt(request.options.format)
+      const canEmbedCover = supportsCoverArt(outputFormat)
       if (coverPath && request.coverFile && canEmbedCover) {
         await ffmpeg.writeFile(coverPath, await fetchFile(request.coverFile))
       } else if (request.coverFile) {
-        warnings.push(`${request.options.format.toUpperCase()} 不支持内嵌封面，已保留文本歌曲信息。`)
+        warnings.push(`${outputFormat.toUpperCase()} 不支持内嵌封面，已保留文本歌曲信息。`)
       }
       let exitCode = await ffmpeg.exec(buildAudioCommand(inputPath, outputPath, request.options, {
         metadata: request.metadata,
         coverPath: canEmbedCover ? coverPath : null,
+        outputFormat,
       }))
-      if (exitCode !== 0 && supportsCoverArt(request.options.format)) {
+      if (exitCode !== 0 && supportsCoverArt(outputFormat)) {
         await safeDelete(ffmpeg, outputPath)
         exitCode = await ffmpeg.exec(buildAudioCommand(inputPath, outputPath, request.options, {
           metadata: request.metadata,
           includeCover: false,
+          outputFormat,
         }))
         if (exitCode === 0) warnings.push('封面与目标格式不兼容，已保留音频和文本歌曲信息。')
       }
@@ -104,9 +112,9 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
       }
       onProgress?.(100)
       return {
-        blob: new Blob([new Uint8Array(data).buffer], { type: outputMime(request.options.format) }),
+        blob: new Blob([new Uint8Array(data).buffer], { type: outputMime(outputFormat) }),
         fileName: outputName,
-        format: request.options.format,
+        format: outputFormat,
         durationMs: performance.now() - startedAt,
         warnings,
       }

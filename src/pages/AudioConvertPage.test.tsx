@@ -116,6 +116,35 @@ describe('AudioConvertPage', () => {
     )
   })
 
+  it('edits song information without changing format or quality', async () => {
+    const user = userEvent.setup()
+    const engine = createEngine({
+      convert: vi.fn().mockResolvedValue(result('track-已编辑.mp3')),
+    })
+    renderPage(engine)
+
+    await user.click(screen.getByRole('button', { name: /仅修改信息/ }))
+    fireEvent.change(screen.getByLabelText('选择音频文件'), {
+      target: { files: [audioFile('track.mp3')] },
+    })
+    await screen.findByText('等待转换')
+    expect(screen.getByText('音频流原样复制')).toBeVisible()
+    await user.type(screen.getByLabelText('歌曲标题'), '保留原音质')
+    await user.click(screen.getByRole('button', { name: /写入歌曲信息/ }))
+
+    expect(await screen.findByText('1 个音频信息修改完成')).toBeVisible()
+    expect(screen.getByRole('link', { name: '下载 track-已编辑.mp3' }))
+      .toHaveAttribute('download', 'track-已编辑.mp3')
+    expect(engine.convert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inputFormat: 'mp3',
+        options: expect.objectContaining({ mode: 'metadata-only' }),
+        metadata: expect.objectContaining({ title: '保留原音质' }),
+      }),
+      expect.any(Function),
+    )
+  })
+
   it('continues a batch after one file fails and downloads successful results', async () => {
     const user = userEvent.setup()
     const convert = vi.fn()
@@ -131,8 +160,31 @@ describe('AudioConvertPage', () => {
 
     expect(await screen.findByText('1 个音频转换完成')).toBeVisible()
     expect(screen.getByText('处理失败')).toBeVisible()
+    const downloadLink = screen.getByRole('link', { name: '下载文件' })
+    expect(downloadLink).toHaveAttribute('download', 'second.mp3')
+    expect(downloadLink.getAttribute('href')).toMatch(/^blob:audio-/)
+  })
+
+  it('uses a ZIP archive only when multiple results are downloaded together', async () => {
+    const user = userEvent.setup()
+    const engine = createEngine({
+      convert: vi.fn()
+        .mockResolvedValueOnce(result('first.mp3'))
+        .mockResolvedValueOnce(result('second.mp3')),
+    })
+    renderPage(engine)
+    fireEvent.change(screen.getByLabelText('选择音频文件'), {
+      target: { files: [audioFile('first.mp3'), audioFile('second.mp3')] },
+    })
+    await waitFor(() => expect(screen.getByText('2 / 20 个文件')).toBeVisible())
+    await user.click(screen.getByRole('button', { name: /开始转换/ }))
+
+    expect(await screen.findByText('2 个音频转换完成')).toBeVisible()
     await user.click(screen.getByRole('button', { name: '下载全部' }))
-    await waitFor(() => expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled())
+    await waitFor(() => {
+      const createdValues = vi.mocked(URL.createObjectURL).mock.calls.map(([value]) => value)
+      expect(createdValues.some((value) => value instanceof Blob && value.type === 'application/zip')).toBe(true)
+    })
   })
 
   it('stops the active conversion and releases object URLs on clear', async () => {

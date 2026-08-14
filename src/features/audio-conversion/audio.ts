@@ -47,7 +47,7 @@ const extensionFormats: Record<string, AudioInputFormat> = {
   aifc: 'aiff',
 }
 
-const outputMimeTypes: Record<AudioOutputFormat, string> = {
+const outputMimeTypes: Record<AudioInputFormat, string> = {
   mp3: 'audio/mpeg',
   wav: 'audio/wav',
   flac: 'audio/flac',
@@ -55,9 +55,11 @@ const outputMimeTypes: Record<AudioOutputFormat, string> = {
   aac: 'audio/aac',
   ogg: 'audio/ogg',
   opus: 'audio/ogg; codecs=opus',
+  wma: 'audio/x-ms-wma',
+  aiff: 'audio/aiff',
 }
 
-const outputExtensions: Record<AudioOutputFormat, string> = {
+const outputExtensions: Record<AudioInputFormat, string> = {
   mp3: 'mp3',
   wav: 'wav',
   flac: 'flac',
@@ -65,6 +67,8 @@ const outputExtensions: Record<AudioOutputFormat, string> = {
   aac: 'aac',
   ogg: 'ogg',
   opus: 'opus',
+  wma: 'wma',
+  aiff: 'aiff',
 }
 
 const bitrateByFormat: Partial<Record<AudioOutputFormat, Record<AudioQualityPreset, string>>> = {
@@ -148,17 +152,22 @@ export function validateAudioBatch(currentFiles: File[], additions: File[]) {
   }
 }
 
-export function outputMime(format: AudioOutputFormat) {
+export function outputMime(format: AudioInputFormat) {
   return outputMimeTypes[format]
 }
 
-export function outputExtension(format: AudioOutputFormat) {
+export function outputExtension(format: AudioInputFormat) {
   return outputExtensions[format]
 }
 
 export function outputFileName(fileName: string, format: AudioOutputFormat) {
   const cleanBase = fileName.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]/g, '_').trim() || 'audio'
   return `${cleanBase}.${outputExtension(format)}`
+}
+
+export function metadataOutputFileName(fileName: string, format: AudioInputFormat) {
+  const cleanBase = fileName.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]/g, '_').trim() || 'audio'
+  return `${cleanBase}-已编辑.${outputExtension(format)}`
 }
 
 export function bitrateRange(format: AudioOutputFormat) {
@@ -191,6 +200,7 @@ export function qualityLabel(
 }
 
 export function estimateAudioOutputSize(durationSeconds: number | null, options: AudioConversionOptions) {
+  if (options.mode === 'metadata-only') return null
   if (durationSeconds === null || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return null
   if (options.format === 'flac') return null
   if (options.format === 'wav') {
@@ -209,7 +219,14 @@ function commonAudioArgs(sampleRate: AudioSampleRate, channels: AudioChannels) {
   return args
 }
 
-function codecArgs(options: AudioConversionOptions) {
+function codecArgs(options: AudioConversionOptions, outputFormat: AudioInputFormat) {
+  if (options.mode === 'metadata-only') {
+    const args = ['-c:a', 'copy']
+    if (outputFormat === 'mp3') args.push('-id3v2_version', '3')
+    if (outputFormat === 'm4a') args.push('-movflags', '+faststart')
+    if (outputFormat === 'aac') args.push('-f', 'adts')
+    return args
+  }
   const bitrate = `${effectiveBitrateKbps(options)}k`
   switch (options.format) {
     case 'mp3': return ['-c:a', 'libmp3lame', '-b:a', bitrate!, '-id3v2_version', '3']
@@ -224,7 +241,7 @@ function codecArgs(options: AudioConversionOptions) {
   }
 }
 
-export function supportsCoverArt(format: AudioOutputFormat) {
+export function supportsCoverArt(format: AudioInputFormat) {
   return format === 'mp3' || format === 'm4a' || format === 'flac'
 }
 
@@ -232,6 +249,7 @@ interface AudioCommandExtras {
   metadata?: AudioMetadata
   coverPath?: string | null
   includeCover?: boolean
+  outputFormat?: AudioInputFormat
 }
 
 const metadataKeys: Array<[keyof AudioMetadata, string]> = [
@@ -250,7 +268,8 @@ export function buildAudioCommand(
   options: AudioConversionOptions,
   extras: AudioCommandExtras = {},
 ) {
-  const includeCover = extras.includeCover ?? supportsCoverArt(options.format)
+  const outputFormat = extras.outputFormat ?? options.format
+  const includeCover = extras.includeCover ?? supportsCoverArt(outputFormat)
   const coverPath = includeCover ? extras.coverPath : null
   const args = ['-i', inputPath]
   if (coverPath) args.push('-i', coverPath)
@@ -268,7 +287,11 @@ export function buildAudioCommand(
       if (value) args.push('-metadata', `${ffmpegKey}=${value}`)
     }
   }
-  args.push(...codecArgs(options), ...commonAudioArgs(options.sampleRate, options.channels), outputPath)
+  args.push(...codecArgs(options, outputFormat))
+  if (options.mode === 'transcode') {
+    args.push(...commonAudioArgs(options.sampleRate, options.channels))
+  }
+  args.push(outputPath)
   return args
 }
 

@@ -10,6 +10,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { ToolHeader } from '../components/SiteHeader'
 import { HighlightedTextarea } from '../features/replacement/HighlightedTextarea'
+import { copyPlainText } from '../features/clipboard'
 import {
   countVisibleCharacters,
   executeReplacement,
@@ -58,22 +59,6 @@ const optionDetails: Array<{
     help: '仅处理原文中第一个符合当前规则的匹配项。',
   },
 ]
-
-async function copyText(value: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value)
-    return
-  }
-  const fallback = document.createElement('textarea')
-  fallback.value = value
-  fallback.style.position = 'fixed'
-  fallback.style.opacity = '0'
-  document.body.appendChild(fallback)
-  fallback.select()
-  const copied = document.execCommand('copy')
-  fallback.remove()
-  if (!copied) throw new Error('copy failed')
-}
 
 export function ReplacePage() {
   const [fields, setFields] = useState<Fields>(EMPTY_FIELDS)
@@ -194,7 +179,7 @@ export function ReplacePage() {
 
   const handleCopy = async () => {
     try {
-      await copyText(fields.result)
+      await copyPlainText(fields.result)
       setNotice('替换结果已复制到剪贴板')
     } catch {
       setNotice('复制失败，请手动选择并复制结果')

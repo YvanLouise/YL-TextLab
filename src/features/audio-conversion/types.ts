@@ -13,6 +13,7 @@ export type AudioOutputFormat = Exclude<AudioInputFormat, 'wma' | 'aiff'>
 
 export type AudioQualityPreset = 'compact' | 'standard' | 'high'
 export type AudioQualityMode = 'preset' | 'custom'
+export type AudioProcessingMode = 'transcode' | 'metadata-only'
 export type AudioSampleRate = 'original' | 44100 | 48000
 export type AudioChannels = 'original' | 'mono' | 'stereo'
 
@@ -27,6 +28,7 @@ export interface AudioMetadata {
 }
 
 export interface AudioConversionOptions {
+  mode: AudioProcessingMode
   format: AudioOutputFormat
   quality: AudioQualityPreset
   qualityMode: AudioQualityMode
@@ -38,6 +40,7 @@ export interface AudioConversionOptions {
 
 export interface AudioConversionRequest {
   file: File
+  inputFormat: AudioInputFormat
   options: AudioConversionOptions
   metadata: AudioMetadata
   coverFile: File | null
@@ -46,7 +49,7 @@ export interface AudioConversionRequest {
 export interface AudioConversionResult {
   blob: Blob
   fileName: string
-  format: AudioOutputFormat
+  format: AudioInputFormat
   durationMs: number
   warnings: string[]
 }
@@ -98,6 +101,7 @@ export class AudioConversionError extends Error {
 }
 
 export const DEFAULT_AUDIO_OPTIONS: AudioConversionOptions = {
+  mode: 'transcode',
   format: 'mp3',
   quality: 'standard',
   qualityMode: 'preset',

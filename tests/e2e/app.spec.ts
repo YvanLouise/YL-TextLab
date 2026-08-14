@@ -65,6 +65,8 @@ test('draft persists and clear removes it', async ({ page }) => {
   await page.getByRole('button', { name: '清空' }).click()
   await page.reload()
   await expect(page.getByRole('textbox', { name: '原始文本' })).toHaveValue('')
+  await expect(page.getByLabel('每段安全上限')).toHaveValue('400')
+  await expect(page.getByLabel('优先按段落边界切分')).toBeChecked()
 })
 
 test('help, changelog and mobile navigation are usable', async ({ page, isMobile }) => {
@@ -75,6 +77,8 @@ test('help, changelog and mobile navigation are usable', async ({ page, isMobile
   await page.getByText('替换结果可以编辑吗？').click()
   await expect(page.getByText(/结果区继续修改后复制/)).toBeVisible()
   await page.goto('/changelog')
+  await expect(page.getByText('v1.5.0')).toBeVisible()
+  await expect(page.getByText('2026-08-14')).toBeVisible()
   await expect(page.getByText('v1.0.0')).toBeVisible()
   await expect(page.getByText('2026-07-23')).toBeVisible()
 
@@ -83,6 +87,7 @@ test('help, changelog and mobile navigation are usable', async ({ page, isMobile
     await page.getByRole('button', { name: '打开导航菜单' }).click()
     const mobileNavigation = page.getByRole('navigation', { name: '移动端导航' })
     await expect(mobileNavigation).toBeVisible()
+    await expect(mobileNavigation.getByRole('link', { name: 'Notion 切分' })).toBeVisible()
     await expect.poll(async () => (await mobileNavigation.boundingBox())?.height).toBe(
       page.viewportSize()?.height,
     )
@@ -101,7 +106,11 @@ test('features page presents live and planned tools', async ({ page }) => {
   await expect(page.getByText('敬请期待', { exact: true })).toHaveCount(3)
   await expect(page.getByRole('link', { name: '文本清理' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: '更多功能，敬请期待' })).toHaveCount(0)
-  await expect(page.getByText(/文本仅保存在本机浏览器/)).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Notion 文本切分' }).click()
+  await expect(page.getByRole('heading', { name: 'Notion 文本切分', level: 2 })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '切分能力' })).toBeVisible()
+  await expect(page.getByText(/文本仅保存在本机浏览器/)).toBeVisible()
 
   await page.getByRole('button', { name: 'PDF 查看' }).click()
   await expect(page.getByRole('heading', { name: 'PDF 查看', level: 2 })).toBeVisible()
@@ -118,6 +127,50 @@ test('features page presents live and planned tools', async ({ page }) => {
   await page.getByRole('button', { name: '音频分割与提取' }).click()
   await expect(page.getByRole('heading', { name: '音频分割与提取', level: 2 })).toBeVisible()
   await expect(page.getByRole('heading', { name: '分割能力' })).toBeVisible()
+})
+
+test('splits, copies, restores and clears a long Notion draft locally', async ({ page, context }) => {
+  const externalMutations: string[] = []
+  page.on('request', (request) => {
+    if (!['GET', 'HEAD'].includes(request.method()) && !request.url().startsWith('http://127.0.0.1:4173')) {
+      externalMutations.push(request.url())
+    }
+  })
+
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
+    origin: 'http://127.0.0.1:4173',
+  })
+  await page.goto('/notion-split')
+  await expect(page.getByRole('heading', { name: 'Notion 文本切分', level: 1 })).toBeVisible()
+
+  const source = '长段落包含中文、English 和 Emoji 😀，用于验证 UTF-8 字节切分。\n\n'.repeat(1800)
+  await page.getByLabel('每段安全上限').fill('100')
+  await page.getByRole('textbox', { name: '原始文本' }).fill(source)
+
+  const chunks = page.getByLabel('切分片段').locator('article')
+  await expect.poll(() => chunks.count()).toBeGreaterThan(1)
+  const chunkValues = await page.getByRole('textbox', { name: /第 \d+ 段文本/ }).evaluateAll(
+    (elements) => elements.map((element) => (element as HTMLTextAreaElement).value),
+  )
+  expect(chunkValues.join('')).toBe(source)
+  expect(chunkValues.every((value) => new TextEncoder().encode(value).byteLength <= 100_000)).toBe(true)
+
+  await page.getByRole('button', { name: '复制下一段' }).click()
+  await expect(page.getByText('已复制', { exact: true }).first()).toBeVisible()
+  await expect.poll(async () => (
+    await page.evaluate(() => navigator.clipboard.readText())
+  ).replaceAll('\r\n', '\n')).toBe(chunkValues[0].replaceAll('\r\n', '\n'))
+
+  await page.waitForTimeout(700)
+  await page.reload()
+  await expect(page.getByRole('textbox', { name: '原始文本' })).toHaveValue(source)
+  await page.getByRole('button', { name: '清空' }).click()
+  await page.reload()
+  await expect(page.getByRole('textbox', { name: '原始文本' })).toHaveValue('')
+
+  const bodyWidth = await page.locator('body').evaluate((element) => element.scrollWidth)
+  expect(bodyWidth).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0)
+  expect(externalMutations).toEqual([])
 })
 
 test('opens and controls a local PDF from the features page', async ({ page }) => {
@@ -236,6 +289,44 @@ test('converts a local WAV to MP3 without uploading audio', async ({ page, isMob
   await expect(page.getByText('2 / 20 个文件')).toBeVisible()
   await page.getByRole('button', { name: /开始转换/ }).click()
   await expect(page.getByText('2 个音频转换完成')).toBeVisible({ timeout: 120_000 })
+  expect(externalMutations).toEqual([])
+})
+
+test('edits local song information without re-encoding audio', async ({ page, isMobile }) => {
+  const externalMutations: string[] = []
+  page.on('request', (request) => {
+    if (!['GET', 'HEAD'].includes(request.method())) externalMutations.push(request.url())
+  })
+
+  await page.goto('/audio-convert')
+  await page.getByRole('button', { name: /仅修改信息/ }).click()
+  await expect(page.getByText('音频流原样复制')).toBeVisible()
+  await page.getByLabel('选择音频文件').setInputFiles({
+    name: 'metadata-tone.wav',
+    mimeType: 'audio/wav',
+    buffer: createTinyWav(),
+  })
+  await expect(page.getByText('等待转换')).toBeVisible()
+  await page.getByLabel('歌曲标题').fill('仅修改歌曲信息')
+  await page.getByRole('textbox', { name: '艺术家', exact: true }).fill('YL TextLab')
+
+  const bodyWidth = await page.locator('body').evaluate((element) => element.scrollWidth)
+  const viewportWidth = page.viewportSize()?.width ?? 0
+  expect(bodyWidth).toBeLessThanOrEqual(viewportWidth)
+  if (isMobile) return
+
+  await page.getByRole('button', { name: /写入歌曲信息/ }).click()
+  await expect(page.getByText('1 个音频信息修改完成')).toBeVisible({ timeout: 120_000 })
+  const download = page.waitForEvent('download')
+  await page.getByRole('link', { name: '下载文件' }).click()
+  const result = await download
+  expect(result.suggestedFilename()).toBe('metadata-tone-已编辑.wav')
+  const path = await result.path()
+  expect(path).not.toBeNull()
+  const output = await readFile(path!)
+  expect(output.subarray(0, 4).toString('ascii')).toBe('RIFF')
+  expect(output.subarray(8, 12).toString('ascii')).toBe('WAVE')
+  await result.delete()
   expect(externalMutations).toEqual([])
 })
 

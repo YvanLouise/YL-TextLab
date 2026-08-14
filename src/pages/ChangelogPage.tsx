@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Clock3, Flag, RefreshCw, ScanText, Search, Sparkles } from 'lucide-react'
+import { ArrowRight, Check, Clock3, Flag, RefreshCw, Rows3, ScanText, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Footer } from '../components/Footer'
 import { SiteHeader } from '../components/SiteHeader'
@@ -35,6 +35,51 @@ export function ChangelogPage() {
         </header>
 
         <div className={`page-shell ${styles.changelogBody}`}>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}>
+              <span className={styles.timelineDot} />
+              <strong>v1.5.0</strong>
+              <time dateTime="2026-08-14">2026-08-14</time>
+              <span className={styles.releaseBadge}>Notion 工具</span>
+            </aside>
+            <div className={styles.releaseNotes}>
+              <section>
+                <h2>新增</h2>
+                <ul>
+                  <li><Check /> 长文本按可调 UTF-8 字节上限自动切分为多个片段</li>
+                  <li><Check /> 优先保留段落、换行、句末标点与单词边界</li>
+                  <li><Check /> 每段独立复制并记录完成状态，方便按顺序粘贴到 Notion</li>
+                </ul>
+              </section>
+              <section>
+                <h2>隐私</h2>
+                <ul>
+                  <li><Check /> 待切分文本仅保存在本机浏览器，不上传服务器</li>
+                  <li><Check /> 本机草稿自动保存，并可通过“清空”完整删除</li>
+                </ul>
+              </section>
+            </div>
+          </article>
+
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}>
+              <span className={styles.timelineDot} />
+              <strong>v1.4.0</strong>
+              <time dateTime="2026-08-09">2026-08-09</time>
+              <span className={styles.releaseBadge}>音乐信息</span>
+            </aside>
+            <div className={styles.releaseNotes}>
+              <section>
+                <h2>新增</h2>
+                <ul>
+                  <li><Check /> 仅修改信息模式保持每个文件的原格式与原音质</li>
+                  <li><Check /> 使用音频流复制，不重新编码码率、采样率或声道</li>
+                  <li><Check /> 输出文件增加“已编辑”后缀，避免覆盖原文件</li>
+                </ul>
+              </section>
+            </div>
+          </article>
+
           <article className={styles.release}>
             <aside className={styles.releaseMeta}>
               <span className={styles.timelineDot} />
@@ -173,13 +218,13 @@ export function ChangelogPage() {
 
           <section className={styles.ctaBand}>
             <span>
-              <Sparkles aria-hidden="true" />
+              <Rows3 aria-hidden="true" />
             </span>
             <div>
-              <h2>开始转换音频</h2>
-              <p>立即体验安全、高效的浏览器本机音频转换。</p>
+              <h2>开始切分 Notion 长文本</h2>
+              <p>在本机自动生成安全片段，再按顺序逐段复制使用。</p>
             </div>
-            <Link className="button button-primary" to="/audio-convert">
+            <Link className="button button-primary" to="/notion-split">
               开始使用 <ArrowRight aria-hidden="true" />
             </Link>
           </section>

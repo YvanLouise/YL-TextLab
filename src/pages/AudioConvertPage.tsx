@@ -133,6 +133,25 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
     setNotice('输出设置已更新，请重新执行转换。')
   }
 
+  const updateProcessingMode = (mode: AudioConversionOptions['mode']) => {
+    setOptions((current) => ({ ...current, mode, preserveMetadata: true }))
+    setItems((current) => current.map((item) => {
+      if (item.resultUrl) URL.revokeObjectURL(item.resultUrl)
+      return {
+        ...item,
+        status: item.inputFormat ? 'queued' : item.status,
+        progress: 0,
+        error: item.inputFormat ? null : item.error,
+        result: null,
+        resultUrl: null,
+        metadataExpanded: mode === 'metadata-only' ? true : item.metadataExpanded,
+      }
+    }))
+    setNotice(mode === 'metadata-only'
+      ? '已切换为仅修改信息：保持原格式和音质，只写入歌曲标签与兼容封面。'
+      : '已切换为格式转换，可重新设置格式与输出质量。')
+  }
+
   const prepareItem = async (item: AudioQueueItem) => {
     try {
       const format = await inspectAudioFile(item.file)
@@ -167,7 +186,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
         result: null,
         resultUrl: null,
         metadata: { ...EMPTY_AUDIO_METADATA },
-        metadataExpanded: false,
+        metadataExpanded: options.mode === 'metadata-only',
         coverFile: null,
         coverUrl: null,
       }))
@@ -275,7 +294,9 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
     let completed = 0
     try {
       const engine = await getEngine()
-      setNotice(`正在按顺序转换 ${ready.length} 个文件。`)
+      setNotice(options.mode === 'metadata-only'
+        ? `正在按顺序写入 ${ready.length} 个文件的歌曲信息。`
+        : `正在按顺序转换 ${ready.length} 个文件。`)
       for (const item of ready) {
         if (cancelledRef.current) break
         setItems((current) => current.map((entry) => entry.id === item.id
@@ -283,7 +304,13 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
           : entry))
         try {
           const result = await engine.convert(
-            { file: item.file, options, metadata: item.metadata, coverFile: item.coverFile },
+            {
+              file: item.file,
+              inputFormat: item.inputFormat!,
+              options,
+              metadata: item.metadata,
+              coverFile: item.coverFile,
+            },
             (progress) => setItems((current) => current.map((entry) => entry.id === item.id
               ? { ...entry, progress }
               : entry)),
@@ -310,7 +337,9 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
       }
       if (!cancelledRef.current) {
         setNotice(completed === ready.length
-          ? `转换完成，共生成 ${completed} 个音频文件。`
+          ? options.mode === 'metadata-only'
+            ? `信息修改完成，共生成 ${completed} 个保持原音质的音频文件。`
+            : `转换完成，共生成 ${completed} 个音频文件。`
           : `已完成 ${completed} 个文件，失败项可查看具体原因。`)
       }
     } catch (error) {
@@ -336,9 +365,10 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
     setNotice('已将文件放回等待队列。')
   }
 
-  const downloadAll = async () => {
+  const downloadResults = async () => {
     const finished = items.filter((item) => item.result)
-    if (!finished.length) return
+    if (finished.length < 2) return
+
     setNotice('正在生成 ZIP 压缩包。')
     const { zipSync } = await import('fflate')
     const entries: Record<string, Uint8Array> = {}
@@ -361,6 +391,10 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
   }
 
   const completedCount = items.filter((item) => item.status === 'done').length
+  const singleFinishedItem = completedCount === 1
+    ? items.find((item) => item.status === 'done' && item.result && item.resultUrl)
+    : undefined
+  const metadataOnly = options.mode === 'metadata-only'
   const selectedFormat = OUTPUT_FORMATS.find((format) => format.value === options.format)!
   const selectedBitrateRange = bitrateRange(options.format)
   const estimatedBytes = items.reduce((total, item) => {
@@ -386,11 +420,35 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
 
         <aside className={styles.settings} aria-label="音频转换设置">
           <header>
-            <div><Gauge aria-hidden="true" /><h2>输出设置</h2></div>
-            <span>{selectedFormat.label}</span>
+            <div><Gauge aria-hidden="true" /><h2>处理设置</h2></div>
+            <span>{metadataOnly ? '原格式' : selectedFormat.label}</span>
           </header>
 
-          <fieldset className={styles.formatFieldset}>
+          <fieldset className={audioStyles.modeFieldset}>
+            <legend>处理方式</legend>
+            <div className={audioStyles.modeGrid}>
+              <button
+                type="button"
+                aria-pressed={!metadataOnly}
+                disabled={busy}
+                onClick={() => updateProcessingMode('transcode')}
+              >
+                <strong>格式转换</strong>
+                <small>调整格式、音质与大小</small>
+              </button>
+              <button
+                type="button"
+                aria-pressed={metadataOnly}
+                disabled={busy}
+                onClick={() => updateProcessingMode('metadata-only')}
+              >
+                <strong>仅修改信息</strong>
+                <small>保持原格式和原音质</small>
+              </button>
+            </div>
+          </fieldset>
+
+          {!metadataOnly ? <><fieldset className={styles.formatFieldset}>
             <legend>目标格式</legend>
             <div className={styles.formatGrid}>
               {OUTPUT_FORMATS.map((format) => (
@@ -512,6 +570,15 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
               </select>
             </label>
           </div>
+          </> : (
+            <div className={audioStyles.metadataOnlyNote}>
+              <FilePenLine aria-hidden="true" />
+              <div>
+                <strong>音频流原样复制</strong>
+                <p>每个文件保持原格式、码率、采样率和声道，仅更新下方填写的歌曲信息及兼容封面。</p>
+              </div>
+            </div>
+          )}
 
           <div className={audioStyles.settingGroup}>
             <label className={audioStyles.metadataToggle}>
@@ -520,13 +587,13 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
                 checked={options.preserveMetadata}
                 onChange={(event) => updateOptions({ preserveMetadata: event.target.checked })}
               />
-              <span>保留歌曲标签<small>尽力保留歌名、艺术家、专辑与兼容的封面。</small></span>
+              <span>{metadataOnly ? '保留未修改的原始标签' : '保留歌曲标签'}<small>尽力保留歌名、艺术家、专辑与兼容的封面。</small></span>
             </label>
           </div>
 
           <div className={audioStyles.engineNote}>
             <Info aria-hidden="true" />
-            <p>首次转换会从本站加载约 31 MB 的本地转码核心，之后按队列逐个处理。</p>
+            <p>首次处理会从本站加载约 31 MB 的本地转码核心，之后按队列逐个处理。</p>
           </div>
 
           <div className={audioStyles.buttonStack}>
@@ -537,7 +604,11 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
               onClick={() => void runConversion()}
             >
               {busy ? <LoaderCircle className={styles.spinner} aria-hidden="true" /> : <Play aria-hidden="true" />}
-              {engineLoading ? '正在加载引擎' : converting ? '正在转换' : `开始转换${items.length ? `（${items.length}）` : ''}`}
+              {engineLoading
+                ? '正在加载引擎'
+                : converting
+                  ? metadataOnly ? '正在写入信息' : '正在转换'
+                  : `${metadataOnly ? '写入歌曲信息' : '开始转换'}${items.length ? `（${items.length}）` : ''}`}
             </button>
             {converting ? (
               <button className={`button ${audioStyles.cancelButton}`} type="button" onClick={cancelConversion}>
@@ -642,7 +713,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
                           </a>
                         ) : null}
                         <button className={audioStyles.retryButton} type="button" onClick={() => retryItem(item.id)}>
-                          <RefreshCcw aria-hidden="true" /> 重新转换
+                          <RefreshCcw aria-hidden="true" /> {metadataOnly ? '重新处理' : '重新转换'}
                         </button>
                       </div>
                     ) : null}
@@ -676,10 +747,21 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
 
           {completedCount ? (
             <div className={styles.resultBar}>
-              <div><Check aria-hidden="true" /><span><strong>{completedCount} 个音频转换完成</strong><small>可单独试听、下载或打包为 ZIP</small></span></div>
-              <button className="button button-primary" type="button" onClick={() => void downloadAll()}>
-                <Archive aria-hidden="true" /> 下载全部
-              </button>
+              <div><Check aria-hidden="true" /><span><strong>{completedCount} 个音频{metadataOnly ? '信息修改' : '转换'}完成</strong><small>{completedCount === 1 ? '可直接试听并下载文件' : '可单独试听、下载或打包为 ZIP'}</small></span></div>
+              {singleFinishedItem?.result && singleFinishedItem.resultUrl ? (
+                <a
+                  className="button button-primary"
+                  href={singleFinishedItem.resultUrl}
+                  download={singleFinishedItem.result.fileName}
+                  onClick={() => setNotice(`已下载 ${singleFinishedItem.result!.fileName}。`)}
+                >
+                  <Download aria-hidden="true" /> 下载文件
+                </a>
+              ) : (
+                <button className="button button-primary" type="button" onClick={() => void downloadResults()}>
+                  <Archive aria-hidden="true" /> 下载全部
+                </button>
+              )}
             </div>
           ) : null}
         </section>

@@ -4,6 +4,7 @@ import { ChangelogPage } from './pages/ChangelogPage'
 import { FeaturesPage } from './pages/FeaturesPage'
 import { HelpPage } from './pages/HelpPage'
 import { HomePage } from './pages/HomePage'
+import { NotionSplitPage } from './pages/NotionSplitPage'
 import { PdfViewerPage } from './pages/PdfViewerPage'
 import { ReplacePage } from './pages/ReplacePage'
 
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/features" element={<FeaturesPage />} />
         <Route path="/replace" element={<ReplacePage />} />
+        <Route path="/notion-split" element={<NotionSplitPage />} />
         <Route path="/pdf" element={<PdfViewerPage />} />
         <Route
           path="/image-convert"
