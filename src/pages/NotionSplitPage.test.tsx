@@ -45,23 +45,23 @@ describe('NotionSplitPage', () => {
     expect(screen.getByRole('button', { name: '复制下一段' })).toBeEnabled()
   })
 
-  it('accepts only integer limits from 100 through 450 KB', async () => {
+  it('accepts only integer limits from 100 through 2,000 characters', async () => {
     renderPage()
-    const limit = screen.getByRole('spinbutton', { name: '每段安全上限' })
+    const limit = screen.getByRole('spinbutton', { name: '每段字符上限' })
 
     fireEvent.change(limit, { target: { value: '99' } })
     expect(limit).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText('请输入 100–450 之间的整数。')).toBeInTheDocument()
-    expect(screen.getByText('请先修正安全上限')).toBeInTheDocument()
+    expect(screen.getByText('请输入 100–2,000 之间的整数。')).toBeInTheDocument()
+    expect(screen.getByText('请先修正字符上限')).toBeInTheDocument()
 
-    fireEvent.change(limit, { target: { value: '451' } })
+    fireEvent.change(limit, { target: { value: '2001' } })
     expect(limit).toHaveAttribute('aria-invalid', 'true')
 
     fireEvent.change(limit, { target: { value: '100' } })
     expect(limit).toHaveAttribute('aria-invalid', 'false')
-    expect(screen.getByText(/Notion 手动粘贴超过约 500 KB/)).toBeInTheDocument()
+    expect(screen.getByText(/默认按 2,000 个可见字符切分/)).toBeInTheDocument()
 
-    fireEvent.change(limit, { target: { value: '450' } })
+    fireEvent.change(limit, { target: { value: '2000' } })
     expect(limit).toHaveAttribute('aria-invalid', 'false')
 
     fireEvent.change(limit, { target: { value: '100.5' } })
@@ -72,14 +72,16 @@ describe('NotionSplitPage', () => {
     const user = userEvent.setup()
     const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined)
     renderPage()
-    fireEvent.change(screen.getByRole('spinbutton', { name: '每段安全上限' }), {
-      target: { value: '100' },
+    fireEvent.change(screen.getByRole('spinbutton', { name: '每段字符上限' }), {
+      target: { value: '2000' },
     })
     fireEvent.change(screen.getByRole('textbox', { name: '原始文本' }), {
       target: { value: makeMultipleChunks() },
     })
 
-    expect(await screen.findByText('已切分 2 段')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getAllByRole('textbox', { name: /第 \d+ 段文本/ }).length).toBeGreaterThan(1)
+    })
     const firstChunk = screen.getByRole('textbox', { name: '第 1 段文本' })
     await user.click(screen.getByRole('button', { name: '复制下一段' }))
 
@@ -138,7 +140,11 @@ describe('NotionSplitPage', () => {
     await saveNotionSplitDraft({
       version: 1,
       source: '已保存的 Notion 草稿',
-      options: { maxBytes: 120_000, preferSemanticBoundaries: false },
+      options: {
+        maxCharacters: 1_200,
+        maxBytes: 400_000,
+        preferSemanticBoundaries: false,
+      },
     })
     const user = userEvent.setup()
     const view = renderPage()
@@ -146,12 +152,12 @@ describe('NotionSplitPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('textbox', { name: '原始文本' })).toHaveValue('已保存的 Notion 草稿')
     })
-    expect(screen.getByRole('spinbutton', { name: '每段安全上限' })).toHaveValue(120)
+    expect(screen.getByRole('spinbutton', { name: '每段字符上限' })).toHaveValue(1200)
     expect(screen.getByRole('checkbox', { name: '优先按段落边界切分' })).not.toBeChecked()
 
     await user.click(screen.getByRole('button', { name: '清空' }))
     await waitFor(() => expect(screen.getByRole('textbox', { name: '原始文本' })).toHaveValue(''))
-    expect(screen.getByRole('spinbutton', { name: '每段安全上限' })).toHaveValue(400)
+    expect(screen.getByRole('spinbutton', { name: '每段字符上限' })).toHaveValue(2000)
     expect(screen.getByRole('checkbox', { name: '优先按段落边界切分' })).toBeChecked()
     await waitFor(async () => expect(await loadNotionSplitDraft()).toBeNull())
 

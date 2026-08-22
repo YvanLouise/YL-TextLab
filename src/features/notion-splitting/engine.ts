@@ -65,10 +65,11 @@ function findMaximumEndIndex(
   spans: GraphemeSpan[],
   startIndex: number,
   maxBytes: number,
+  maxCharacters: number,
 ): number {
   const bytesBeforeStart = startIndex === 0 ? 0 : spans[startIndex - 1].cumulativeBytes
   let low = startIndex
-  let high = spans.length - 1
+  let high = Math.min(spans.length - 1, startIndex + maxCharacters - 1)
   let best = startIndex - 1
 
   while (low <= high) {
@@ -112,10 +113,14 @@ function findLastBoundary(
 }
 
 function normalizeOptions(options: NotionSplitOptions): NotionSplitOptions {
+  if (!Number.isFinite(options.maxCharacters) || options.maxCharacters < 1) {
+    throw new RangeError('maxCharacters must be a positive finite number')
+  }
   if (!Number.isFinite(options.maxBytes) || options.maxBytes < 1) {
     throw new RangeError('maxBytes must be a positive finite number')
   }
   return {
+    maxCharacters: Math.floor(options.maxCharacters),
     maxBytes: Math.floor(options.maxBytes),
     preferSemanticBoundaries: options.preferSemanticBoundaries,
   }
@@ -136,6 +141,7 @@ export function splitForNotion(
       totalByteLength,
       totalCharacterCount,
       maxChunkByteLength: 0,
+      maxChunkCharacterCount: 0,
     }
   }
 
@@ -153,6 +159,7 @@ export function splitForNotion(
       spans,
       startIndex,
       normalizedOptions.maxBytes,
+      normalizedOptions.maxCharacters,
     )
     if (maximumEndIndex < startIndex) {
       throw new RangeError(
@@ -208,6 +215,10 @@ export function splitForNotion(
     totalCharacterCount,
     maxChunkByteLength: chunks.reduce(
       (largest, chunk) => Math.max(largest, chunk.byteLength),
+      0,
+    ),
+    maxChunkCharacterCount: chunks.reduce(
+      (largest, chunk) => Math.max(largest, chunk.characterCount),
       0,
     ),
   }

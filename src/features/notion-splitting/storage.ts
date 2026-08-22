@@ -45,22 +45,51 @@ async function transact<T>(
   }
 }
 
-function isValidDraft(value: unknown): value is NotionSplitDraftV1 {
-  if (!value || typeof value !== 'object') return false
-  const draft = value as Partial<NotionSplitDraftV1>
-  return (
-    draft.version === 1 &&
-    typeof draft.source === 'string' &&
-    typeof draft.options?.maxBytes === 'number' &&
-    Number.isFinite(draft.options.maxBytes) &&
-    draft.options.maxBytes > 0 &&
-    typeof draft.options.preferSemanticBoundaries === 'boolean'
-  )
+function normalizeDraft(value: unknown): NotionSplitDraftV1 | null {
+  if (!value || typeof value !== 'object') return null
+  const draft = value as {
+    version?: unknown
+    source?: unknown
+    options?: {
+      maxCharacters?: unknown
+      maxBytes?: unknown
+      preferSemanticBoundaries?: unknown
+    }
+  }
+  if (
+    draft.version !== 1 ||
+    typeof draft.source !== 'string' ||
+    typeof draft.options?.maxBytes !== 'number' ||
+    !Number.isFinite(draft.options.maxBytes) ||
+    draft.options.maxBytes < 1 ||
+    typeof draft.options.preferSemanticBoundaries !== 'boolean'
+  ) {
+    return null
+  }
+
+  const storedMaxCharacters = draft.options.maxCharacters
+  const maxCharacters =
+    typeof storedMaxCharacters === 'number' &&
+    Number.isFinite(storedMaxCharacters) &&
+    storedMaxCharacters > 0
+      ? Math.floor(storedMaxCharacters)
+      : DEFAULT_NOTION_SPLIT_OPTIONS.maxCharacters
+
+  return {
+    version: 1,
+    source: draft.source,
+    options: {
+      maxCharacters,
+      maxBytes: Math.floor(draft.options.maxBytes),
+      preferSemanticBoundaries: draft.options.preferSemanticBoundaries,
+    },
+  }
 }
 
 function isEmptyDraft(draft: NotionSplitDraftV1): boolean {
   return (
     !draft.source &&
+    draft.options.maxCharacters === DEFAULT_NOTION_SPLIT_OPTIONS.maxCharacters &&
     draft.options.maxBytes === DEFAULT_NOTION_SPLIT_OPTIONS.maxBytes &&
     draft.options.preferSemanticBoundaries ===
       DEFAULT_NOTION_SPLIT_OPTIONS.preferSemanticBoundaries
@@ -70,9 +99,10 @@ function isEmptyDraft(draft: NotionSplitDraftV1): boolean {
 export async function loadNotionSplitDraft(): Promise<NotionSplitDraftV1 | null> {
   try {
     const draft = await transact<unknown>('readonly', (store) => store.get(DRAFT_KEY))
-    if (isValidDraft(draft)) {
-      memoryDraft = draft
-      return draft
+    const normalizedDraft = normalizeDraft(draft)
+    if (normalizedDraft) {
+      memoryDraft = normalizedDraft
+      return normalizedDraft
     }
     return null
   } catch {

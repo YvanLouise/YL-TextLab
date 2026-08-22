@@ -71,7 +71,7 @@ const faqs = [
     answer: '不会。片段会完整保留原文内容和换行，按顺序拼接所有片段即可还原原文。',
   },
   {
-    question: '为什么有些片段没有达到字节上限？',
+    question: '为什么有些片段没有达到字符上限？',
     answer: '工具会优先在段落、换行和句末标点处切分，以减少句子被截断的情况。',
   },
   {
@@ -110,7 +110,7 @@ const audioFormats = [
 ]
 
 const notionSplitFeatures = [
-  { title: '安全切分', badge: 'SAFE', description: '按 UTF-8 字节计算，每个片段都不超过设定上限，避免再次触发单次粘贴限制。' },
+  { title: '双重限制', badge: 'SAFE', description: '默认每段不超过 2,000 个可见字符，同时保留 400 KB 字节保护。' },
   { title: '智能边界', badge: 'TEXT', description: '优先沿空行、换行、句末标点和单词边界切分，尽量保持内容连贯。' },
   { title: '逐段复制', badge: 'COPY', description: '每个片段都可独立复制并记录完成状态，方便按顺序粘贴到 Notion。' },
 ]

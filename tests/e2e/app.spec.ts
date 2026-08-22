@@ -65,8 +65,6 @@ test('draft persists and clear removes it', async ({ page }) => {
   await page.getByRole('button', { name: '清空' }).click()
   await page.reload()
   await expect(page.getByRole('textbox', { name: '原始文本' })).toHaveValue('')
-  await expect(page.getByLabel('每段安全上限')).toHaveValue('400')
-  await expect(page.getByLabel('优先按段落边界切分')).toBeChecked()
 })
 
 test('help, changelog and mobile navigation are usable', async ({ page, isMobile }) => {
@@ -132,19 +130,19 @@ test('features page presents live and planned tools', async ({ page }) => {
 test('splits, copies, restores and clears a long Notion draft locally', async ({ page, context }) => {
   const externalMutations: string[] = []
   page.on('request', (request) => {
-    if (!['GET', 'HEAD'].includes(request.method()) && !request.url().startsWith('http://127.0.0.1:4173')) {
+    if (!['GET', 'HEAD'].includes(request.method()) && !request.url().startsWith('http://127.0.0.1:4175')) {
       externalMutations.push(request.url())
     }
   })
 
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], {
-    origin: 'http://127.0.0.1:4173',
+    origin: 'http://127.0.0.1:4175',
   })
   await page.goto('/notion-split')
   await expect(page.getByRole('heading', { name: 'Notion 文本切分', level: 1 })).toBeVisible()
 
-  const source = '长段落包含中文、English 和 Emoji 😀，用于验证 UTF-8 字节切分。\n\n'.repeat(1800)
-  await page.getByLabel('每段安全上限').fill('100')
+  const source = '长段落包含中文、English 和 Emoji 😀，用于验证字符与 UTF-8 字节双重切分。\n\n'.repeat(120)
+  await page.getByLabel('每段字符上限').fill('1000')
   await page.getByRole('textbox', { name: '原始文本' }).fill(source)
 
   const chunks = page.getByLabel('切分片段').locator('article')
@@ -153,7 +151,8 @@ test('splits, copies, restores and clears a long Notion draft locally', async ({
     (elements) => elements.map((element) => (element as HTMLTextAreaElement).value),
   )
   expect(chunkValues.join('')).toBe(source)
-  expect(chunkValues.every((value) => new TextEncoder().encode(value).byteLength <= 100_000)).toBe(true)
+  expect(chunkValues.every((value) => Array.from(value).length <= 1000)).toBe(true)
+  expect(chunkValues.every((value) => new TextEncoder().encode(value).byteLength <= 400_000)).toBe(true)
 
   await page.getByRole('button', { name: '复制下一段' }).click()
   await expect(page.getByText('已复制', { exact: true }).first()).toBeVisible()

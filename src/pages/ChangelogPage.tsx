@@ -46,7 +46,7 @@ export function ChangelogPage() {
               <section>
                 <h2>新增</h2>
                 <ul>
-                  <li><Check /> 长文本按可调 UTF-8 字节上限自动切分为多个片段</li>
+                  <li><Check /> 长文本按字符与 UTF-8 字节双重上限自动切分为多个片段</li>
                   <li><Check /> 优先保留段落、换行、句末标点与单词边界</li>
                   <li><Check /> 每段独立复制并记录完成状态，方便按顺序粘贴到 Notion</li>
                 </ul>

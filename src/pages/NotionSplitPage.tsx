@@ -7,7 +7,7 @@ import {
   LockKeyhole,
   Trash2,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ToolHeader } from '../components/SiteHeader'
 import { copyPlainText } from '../features/clipboard'
 import { countVisibleCharacters } from '../features/replacement/engine'
@@ -17,17 +17,22 @@ import {
   loadNotionSplitDraft,
   saveNotionSplitDraft,
 } from '../features/notion-splitting/storage'
-import type { NotionSplitResult } from '../features/notion-splitting/types'
+import {
+  DEFAULT_NOTION_SPLIT_OPTIONS,
+  type NotionSplitChunk,
+  type NotionSplitResult,
+} from '../features/notion-splitting/types'
 import styles from './NotionSplitPage.module.css'
 
-const DEFAULT_MAX_KILOBYTES = 400
-const MIN_MAX_KILOBYTES = 100
-const MAX_MAX_KILOBYTES = 450
+const DEFAULT_MAX_CHARACTERS = DEFAULT_NOTION_SPLIT_OPTIONS.maxCharacters
+const MIN_MAX_CHARACTERS = 100
+const MAX_MAX_CHARACTERS = 2_000
 const EMPTY_RESULT: NotionSplitResult = {
   chunks: [],
   totalByteLength: 0,
   totalCharacterCount: 0,
   maxChunkByteLength: 0,
+  maxChunkCharacterCount: 0,
 }
 
 function formatBytes(bytes: number) {
@@ -47,32 +52,57 @@ function useDebouncedValue<T>(value: T, delay: number) {
   return debouncedValue
 }
 
+function ChunkPreview({ chunk }: { chunk: NotionSplitChunk }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    textarea.scrollTop = 0
+    textarea.scrollLeft = 0
+    textarea.setSelectionRange(0, 0)
+  }, [chunk.text])
+
+  return (
+    <textarea
+      ref={textareaRef}
+      readOnly
+      aria-label={`第 ${chunk.index + 1} 段文本`}
+      value={chunk.text}
+      spellCheck={false}
+    />
+  )
+}
+
 export function NotionSplitPage() {
   const [source, setSource] = useState('')
-  const [maxKilobytesInput, setMaxKilobytesInput] = useState(String(DEFAULT_MAX_KILOBYTES))
+  const [maxCharactersInput, setMaxCharactersInput] = useState(String(DEFAULT_MAX_CHARACTERS))
   const [preferSemanticBoundaries, setPreferSemanticBoundaries] = useState(true)
   const [copiedChunks, setCopiedChunks] = useState<Set<number>>(() => new Set())
   const [notice, setNotice] = useState('粘贴文本后将自动切分')
   const [hydrated, setHydrated] = useState(false)
   const [storageWarning, setStorageWarning] = useState(false)
 
-  const parsedMaxKilobytes = Number(maxKilobytesInput)
-  const maxKilobytesValid = /^\d+$/.test(maxKilobytesInput)
-    && Number.isInteger(parsedMaxKilobytes)
-    && parsedMaxKilobytes >= MIN_MAX_KILOBYTES
-    && parsedMaxKilobytes <= MAX_MAX_KILOBYTES
-  const maxBytes = maxKilobytesValid ? parsedMaxKilobytes * 1000 : 0
+  const parsedMaxCharacters = Number(maxCharactersInput)
+  const maxCharactersValid = /^\d+$/.test(maxCharactersInput)
+    && Number.isInteger(parsedMaxCharacters)
+    && parsedMaxCharacters >= MIN_MAX_CHARACTERS
+    && parsedMaxCharacters <= MAX_MAX_CHARACTERS
   const debouncedSource = useDebouncedValue(source, 150)
 
   const result = useMemo(
-    () => maxKilobytesValid && debouncedSource
-      ? splitForNotion(debouncedSource, { maxBytes, preferSemanticBoundaries })
+    () => maxCharactersValid && debouncedSource
+      ? splitForNotion(debouncedSource, {
+          maxCharacters: parsedMaxCharacters,
+          maxBytes: DEFAULT_NOTION_SPLIT_OPTIONS.maxBytes,
+          preferSemanticBoundaries,
+        })
       : EMPTY_RESULT,
-    [debouncedSource, maxBytes, maxKilobytesValid, preferSemanticBoundaries],
+    [debouncedSource, maxCharactersValid, parsedMaxCharacters, preferSemanticBoundaries],
   )
   const liveCharacterCount = useMemo(() => countVisibleCharacters(source), [source])
   const liveByteLength = useMemo(() => utf8ByteLength(source), [source])
-  const processing = source !== debouncedSource && maxKilobytesValid
+  const processing = source !== debouncedSource && maxCharactersValid
   const copiedCount = result.chunks.reduce(
     (count, chunk) => count + (copiedChunks.has(chunk.index) ? 1 : 0),
     0,
@@ -85,7 +115,7 @@ export function NotionSplitPage() {
       if (cancelled) return
       if (draft) {
         setSource(draft.source)
-        setMaxKilobytesInput(String(draft.options.maxBytes / 1000))
+        setMaxCharactersInput(String(draft.options.maxCharacters))
         setPreferSemanticBoundaries(draft.options.preferSemanticBoundaries)
         setNotice('已恢复本机草稿并重新切分')
       }
@@ -95,16 +125,20 @@ export function NotionSplitPage() {
   }, [])
 
   useEffect(() => {
-    if (!hydrated || !maxKilobytesValid) return
+    if (!hydrated || !maxCharactersValid) return
     const timeout = window.setTimeout(() => {
       saveNotionSplitDraft({
         version: 1,
         source,
-        options: { maxBytes, preferSemanticBoundaries },
+        options: {
+          maxCharacters: parsedMaxCharacters,
+          maxBytes: DEFAULT_NOTION_SPLIT_OPTIONS.maxBytes,
+          preferSemanticBoundaries,
+        },
       }).then((saved) => setStorageWarning(!saved))
     }, 500)
     return () => window.clearTimeout(timeout)
-  }, [hydrated, maxBytes, maxKilobytesValid, preferSemanticBoundaries, source])
+  }, [hydrated, maxCharactersValid, parsedMaxCharacters, preferSemanticBoundaries, source])
 
   const copyChunk = async (chunkIndex: number) => {
     const chunk = result.chunks.find((item) => item.index === chunkIndex)
@@ -120,7 +154,7 @@ export function NotionSplitPage() {
 
   const clearAll = async () => {
     setSource('')
-    setMaxKilobytesInput(String(DEFAULT_MAX_KILOBYTES))
+    setMaxCharactersInput(String(DEFAULT_MAX_CHARACTERS))
     setPreferSemanticBoundaries(true)
     setCopiedChunks(new Set())
     setNotice('文本、切分结果和本机草稿已清空')
@@ -128,12 +162,12 @@ export function NotionSplitPage() {
     await clearNotionSplitDraft()
   }
 
-  const statusText = !maxKilobytesValid
-    ? `每段上限必须是 ${MIN_MAX_KILOBYTES}–${MAX_MAX_KILOBYTES} 之间的整数`
+  const statusText = !maxCharactersValid
+    ? `每段上限必须是 ${MIN_MAX_CHARACTERS}–${MAX_MAX_CHARACTERS.toLocaleString('zh-CN')} 之间的整数`
     : processing
       ? '正在重新计算安全片段…'
       : result.chunks.length
-        ? preferSemanticBoundaries ? '已按段落边界安全切分' : '已按 UTF-8 大小安全切分'
+        ? preferSemanticBoundaries ? '已按段落边界安全切分' : '已按字符上限安全切分'
         : '粘贴文本后将自动安全切分'
 
   return (
@@ -167,29 +201,29 @@ export function NotionSplitPage() {
             />
             <div className={styles.sourceSettings}>
               <div className={styles.limitSetting}>
-                <label htmlFor="notion-max-kb">每段安全上限</label>
+                <label htmlFor="notion-max-characters">每段字符上限</label>
                 <div className={styles.limitRow}>
                   <span className={styles.numberField}>
                     <input
-                      id="notion-max-kb"
+                      id="notion-max-characters"
                       type="number"
-                      min={MIN_MAX_KILOBYTES}
-                      max={MAX_MAX_KILOBYTES}
-                      step="10"
-                      value={maxKilobytesInput}
-                      aria-invalid={!maxKilobytesValid}
+                      min={MIN_MAX_CHARACTERS}
+                      max={MAX_MAX_CHARACTERS}
+                      step="100"
+                      value={maxCharactersInput}
+                      aria-invalid={!maxCharactersValid}
                       aria-describedby="notion-limit-help"
                       onChange={(event) => {
-                        setMaxKilobytesInput(event.target.value)
+                        setMaxCharactersInput(event.target.value)
                         setCopiedChunks(new Set())
                       }}
                     />
-                    <span>KB</span>
+                    <span>字符</span>
                   </span>
                   <small id="notion-limit-help">
-                    {maxKilobytesValid
-                      ? 'Notion 手动粘贴超过约 500 KB 可能失败，建议保留余量。'
-                      : `请输入 ${MIN_MAX_KILOBYTES}–${MAX_MAX_KILOBYTES} 之间的整数。`}
+                    {maxCharactersValid
+                      ? '默认按 2,000 个可见字符切分，并保留 400 KB 字节保护。'
+                      : `请输入 ${MIN_MAX_CHARACTERS}–${MAX_MAX_CHARACTERS.toLocaleString('zh-CN')} 之间的整数。`}
                   </small>
                 </div>
               </div>
@@ -220,7 +254,7 @@ export function NotionSplitPage() {
                 <button
                   className="button button-primary"
                   type="button"
-                  disabled={!nextChunk || processing || !maxKilobytesValid}
+                  disabled={!nextChunk || processing || !maxCharactersValid}
                   onClick={() => nextChunk && void copyChunk(nextChunk.index)}
                 >
                   {nextChunk ? <ClipboardCopy aria-hidden="true" /> : <Check aria-hidden="true" />}
@@ -252,12 +286,7 @@ export function NotionSplitPage() {
                           {copied ? '再次复制' : '复制本段'}
                         </button>
                       </header>
-                      <textarea
-                        readOnly
-                        aria-label={`第 ${chunk.index + 1} 段文本`}
-                        value={chunk.text}
-                        spellCheck={false}
-                      />
+                      <ChunkPreview chunk={chunk} />
                     </article>
                   )
                 })}
@@ -265,8 +294,8 @@ export function NotionSplitPage() {
             ) : (
               <div className={styles.emptyState}>
                 <span><Files aria-hidden="true" /></span>
-                <h3>{maxKilobytesValid ? '等待粘贴长文本' : '请先修正安全上限'}</h3>
-                <p>{maxKilobytesValid ? '切分结果会自动出现在这里，并可按顺序逐段复制。' : '有效范围为 100–450 KB。'}</p>
+                <h3>{maxCharactersValid ? '等待粘贴长文本' : '请先修正字符上限'}</h3>
+                <p>{maxCharactersValid ? '切分结果会自动出现在这里，并可按顺序逐段复制。' : '有效范围为 100–2,000 字符。'}</p>
               </div>
             )}
 
@@ -291,14 +320,14 @@ export function NotionSplitPage() {
 
         <section className={styles.statusBar} aria-label="切分状态">
           <div className={styles.statusMessage}>
-            {maxKilobytesValid ? <CheckCircle2 aria-hidden="true" /> : <LockKeyhole aria-hidden="true" />}
+            {maxCharactersValid ? <CheckCircle2 aria-hidden="true" /> : <LockKeyhole aria-hidden="true" />}
             <strong>{statusText}</strong>
             {storageWarning ? <small>IndexedDB 暂不可用，本次仅在当前会话中保留草稿。</small> : null}
           </div>
           <dl>
             <div><dt>原文</dt><dd>{formatBytes(liveByteLength)}</dd></div>
             <div><dt>分段</dt><dd>{result.chunks.length}</dd></div>
-            <div><dt>最大段</dt><dd>{formatBytes(result.maxChunkByteLength)}</dd></div>
+            <div><dt>最大段</dt><dd>{result.maxChunkCharacterCount.toLocaleString('zh-CN')} 字</dd></div>
           </dl>
         </section>
         <p className="sr-only" aria-live="polite">{notice}</p>

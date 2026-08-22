@@ -6,6 +6,7 @@ describe('Notion text splitting', () => {
   it('counts UTF-8 bytes instead of UTF-16 code units', () => {
     expect(utf8ByteLength('A中😀')).toBe(8)
     expect(DEFAULT_NOTION_SPLIT_OPTIONS).toEqual({
+      maxCharacters: 2_000,
       maxBytes: 400_000,
       preferSemanticBoundaries: true,
     })
@@ -17,6 +18,7 @@ describe('Notion text splitting', () => {
       totalByteLength: 0,
       totalCharacterCount: 0,
       maxChunkByteLength: 0,
+      maxChunkCharacterCount: 0,
     })
   })
 
@@ -38,6 +40,7 @@ describe('Notion text splitting', () => {
   it('uses paragraph, line, sentence, then space boundaries in priority order', () => {
     const paragraphSource = '短段\n\n第一句结束。第二句还在继续'
     const paragraph = splitForNotion(paragraphSource, {
+      maxCharacters: 10_000,
       maxBytes: utf8ByteLength('短段\n\n第一句结束。第二句'),
       preferSemanticBoundaries: true,
     })
@@ -47,6 +50,7 @@ describe('Notion text splitting', () => {
     })
 
     const line = splitForNotion('第一句。\n第二句还在继续', {
+      maxCharacters: 10_000,
       maxBytes: utf8ByteLength('第一句。\n第二句'),
       preferSemanticBoundaries: true,
     })
@@ -56,6 +60,7 @@ describe('Notion text splitting', () => {
     })
 
     const sentence = splitForNotion('第一句结束。第二句 still going', {
+      maxCharacters: 10_000,
       maxBytes: utf8ByteLength('第一句结束。第二句 still'),
       preferSemanticBoundaries: true,
     })
@@ -65,6 +70,7 @@ describe('Notion text splitting', () => {
     })
 
     const space = splitForNotion('alpha beta-gamma-delta', {
+      maxCharacters: 10_000,
       maxBytes: utf8ByteLength('alpha beta-gamma'),
       preferSemanticBoundaries: true,
     })
@@ -74,6 +80,7 @@ describe('Notion text splitting', () => {
   it('can split strictly at the largest grapheme boundary', () => {
     const source = '甲乙ab😀Z'
     const result = splitForNotion(source, {
+      maxCharacters: 10_000,
       maxBytes: 4,
       preferSemanticBoundaries: false,
     })
@@ -95,6 +102,7 @@ describe('Notion text splitting', () => {
     const family = '👨‍👩‍👧‍👦'
     const source = `a${family}b`
     const result = splitForNotion(source, {
+      maxCharacters: 10_000,
       maxBytes: utf8ByteLength(family),
       preferSemanticBoundaries: false,
     })
@@ -108,6 +116,7 @@ describe('Notion text splitting', () => {
     const source = `${'段落一内容。'.repeat(15)}\r\n\r\n${'Second paragraph '.repeat(20)}😀尾声`
     const maxBytes = 72
     const result = splitForNotion(source, {
+      maxCharacters: 10_000,
       maxBytes,
       preferSemanticBoundaries: true,
     })
@@ -120,17 +129,49 @@ describe('Notion text splitting', () => {
     expect(result.maxChunkByteLength).toBe(
       Math.max(...result.chunks.map((chunk) => chunk.byteLength)),
     )
+    expect(result.maxChunkCharacterCount).toBe(
+      Math.max(...result.chunks.map((chunk) => chunk.characterCount)),
+    )
     expect(
       result.chunks.reduce((total, chunk) => total + chunk.characterCount, 0),
     ).toBe(result.totalCharacterCount)
   })
 
+  it('applies the visible-character and byte limits together', () => {
+    const source = `${'中文段落。'.repeat(900)}😀结尾`
+    const result = splitForNotion(source, {
+      maxCharacters: 2_000,
+      maxBytes: 400_000,
+      preferSemanticBoundaries: true,
+    })
+
+    expect(result.chunks.length).toBeGreaterThan(1)
+    expect(result.chunks.every((chunk) => chunk.characterCount <= 2_000)).toBe(true)
+    expect(result.chunks.every((chunk) => chunk.byteLength <= 400_000)).toBe(true)
+    expect(result.chunks.map((chunk) => chunk.text).join('')).toBe(source)
+  })
+
   it('rejects impossible or invalid byte limits', () => {
     expect(() =>
-      splitForNotion('text', { maxBytes: 0, preferSemanticBoundaries: true }),
+      splitForNotion('text', {
+        maxCharacters: 2_000,
+        maxBytes: 0,
+        preferSemanticBoundaries: true,
+      }),
     ).toThrow(RangeError)
     expect(() =>
-      splitForNotion('😀', { maxBytes: 3, preferSemanticBoundaries: false }),
+      splitForNotion('😀', {
+        maxCharacters: 2_000,
+        maxBytes: 3,
+        preferSemanticBoundaries: false,
+      }),
     ).toThrow('single Unicode grapheme')
+    expect(() =>
+      splitForNotion('text', {
+        maxCharacters: 0,
+        maxBytes: 400_000,
+        preferSemanticBoundaries: true,
+      }),
+    ).toThrow('maxCharacters')
   })
 })

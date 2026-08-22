@@ -107,7 +107,7 @@ const notionSplitWorkflow = [
   },
   {
     title: '智能切分',
-    description: '按 UTF-8 字节上限，优先在段落与句子边界切分。',
+    description: '按字符与 UTF-8 字节双重上限，优先在段落与句子边界切分。',
     icon: Rows3,
   },
   {
@@ -118,7 +118,7 @@ const notionSplitWorkflow = [
 ]
 
 const notionSplitCapabilities = [
-  { title: '安全上限', description: '每个片段都不超过设定的 UTF-8 字节数，并可在 100–450 KB 间调整。', icon: Settings2 },
+  { title: '双重上限', description: '默认每段最多 2,000 个可见字符，同时保留 400 KB 字节保护。', icon: Settings2 },
   { title: '智能边界', description: '优先保留空行、换行、句末标点和单词边界。', icon: Rows3 },
   { title: '完整保留', description: '不删减原文内容与换行，按顺序拼接即可还原原文。', icon: FileText },
   { title: '本地隐私', description: '文本仅保存在本机浏览器，不上传服务器，可通过清空删除草稿。', icon: LockKeyhole },
@@ -318,7 +318,7 @@ function NotionSplitFeature() {
           <header><Rows3 aria-hidden="true" /><strong>切分结果（预览）</strong></header>
           <div className={styles.previewText}>
             <p><strong>片段 1：</strong>保留完整段落与句子边界</p>
-            <p><strong>片段 2：</strong>低于设定的 UTF-8 字节上限</p>
+            <p><strong>片段 2：</strong>同时低于字符和 UTF-8 字节上限</p>
             <p><strong>片段 3：</strong>可按顺序独立复制使用</p>
           </div>
           <footer><span className={styles.completed}><Check aria-hidden="true" /> 已生成 3 个安全片段</span></footer>

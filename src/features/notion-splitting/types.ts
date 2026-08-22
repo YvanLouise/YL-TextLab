@@ -7,6 +7,7 @@ export type NotionSplitBoundary =
   | 'end'
 
 export interface NotionSplitOptions {
+  maxCharacters: number
   maxBytes: number
   preferSemanticBoundaries: boolean
 }
@@ -26,6 +27,7 @@ export interface NotionSplitResult {
   totalByteLength: number
   totalCharacterCount: number
   maxChunkByteLength: number
+  maxChunkCharacterCount: number
 }
 
 export interface NotionSplitDraftV1 {
@@ -35,6 +37,7 @@ export interface NotionSplitDraftV1 {
 }
 
 export const DEFAULT_NOTION_SPLIT_OPTIONS: NotionSplitOptions = {
+  maxCharacters: 2_000,
   maxBytes: 400_000,
   preferSemanticBoundaries: true,
 }

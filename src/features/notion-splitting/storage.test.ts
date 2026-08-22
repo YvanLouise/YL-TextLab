@@ -13,6 +13,7 @@ const draft: NotionSplitDraftV1 = {
   version: 1,
   source: '一段等待切分的 Notion 文本',
   options: {
+    maxCharacters: 1_500,
     maxBytes: 350_000,
     preferSemanticBoundaries: false,
   },
@@ -50,7 +51,11 @@ describe('Notion split draft storage fallback', () => {
     const optionsOnlyDraft: NotionSplitDraftV1 = {
       version: 1,
       source: '',
-      options: { maxBytes: 300_000, preferSemanticBoundaries: true },
+      options: {
+        maxCharacters: 1_000,
+        maxBytes: 300_000,
+        preferSemanticBoundaries: true,
+      },
     }
 
     await saveNotionSplitDraft(optionsOnlyDraft)
