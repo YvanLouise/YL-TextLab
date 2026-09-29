@@ -38,6 +38,26 @@ export function ChangelogPage() {
           <article className={styles.release}>
             <aside className={styles.releaseMeta}>
               <span className={styles.timelineDot} />
+              <strong>v1.6.0</strong>
+              <time dateTime="2026-09-29">2026-09-29</time>
+              <span className={styles.releaseBadge}>图片压缩</span>
+            </aside>
+            <div className={styles.releaseNotes}>
+              <section>
+                <h2>新增</h2>
+                <ul>
+                  <li><Check /> 图片工具增加格式转换与图片压缩模式切换</li>
+                  <li><Check /> PNG、JPG、WebP 压缩及可选目标大小、自动等比缩小</li>
+                  <li><Check /> 显示实际体积变化和目标达成状态；未达标也可下载有效结果</li>
+                  <li><Check /> 单个结果直接下载，多图可打包 ZIP；压缩输出默认移除 EXIF</li>
+                </ul>
+              </section>
+            </div>
+          </article>
+
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}>
+              <span className={styles.timelineDot} />
               <strong>v1.5.0</strong>
               <time dateTime="2026-08-14">2026-08-14</time>
               <span className={styles.releaseBadge}>Notion 工具</span>

@@ -14,6 +14,16 @@ export interface ImageConversionOptions {
   icoSize: IcoSize
 }
 
+export type ImageCompressionFormat = 'original' | 'jpeg' | 'webp'
+
+export interface ImageCompressionOptions {
+  format: ImageCompressionFormat
+  quality: number
+  targetBytes: number | null
+  autoResize: boolean
+  background: string
+}
+
 export interface DecodedImage {
   width: number
   height: number
@@ -31,6 +41,12 @@ export interface ImageConversionResult {
   durationMs: number
 }
 
+export interface ImageCompressionResult extends ImageConversionResult {
+  originalBytes: number
+  targetBytes: number | null
+  targetMet: boolean | null
+}
+
 export interface ImageQueueItem {
   id: string
   file: File
@@ -40,7 +56,7 @@ export interface ImageQueueItem {
   height: number | null
   status: ImageQueueStatus
   error: string | null
-  result: ImageConversionResult | null
+  result: ImageConversionResult | ImageCompressionResult | null
   resultUrl: string | null
 }
 
@@ -65,6 +81,14 @@ export const DEFAULT_IMAGE_OPTIONS: ImageConversionOptions = {
   background: '#ffffff',
   icoMode: 'multi',
   icoSize: 256,
+}
+
+export const DEFAULT_COMPRESSION_OPTIONS: ImageCompressionOptions = {
+  format: 'original',
+  quality: 0.8,
+  targetBytes: null,
+  autoResize: true,
+  background: '#ffffff',
 }
 
 export const ICO_SIZES: IcoSize[] = [16, 32, 48, 64, 128, 256]

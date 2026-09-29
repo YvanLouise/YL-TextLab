@@ -14,6 +14,7 @@ export type AudioOutputFormat = Exclude<AudioInputFormat, 'wma' | 'aiff'>
 export type AudioQualityPreset = 'compact' | 'standard' | 'high'
 export type AudioQualityMode = 'preset' | 'custom'
 export type AudioProcessingMode = 'transcode' | 'metadata-only'
+export type WavMetadataEncoding = 'gbk' | 'utf-8'
 export type AudioSampleRate = 'original' | 44100 | 48000
 export type AudioChannels = 'original' | 'mono' | 'stereo'
 
@@ -36,6 +37,7 @@ export interface AudioConversionOptions {
   sampleRate: AudioSampleRate
   channels: AudioChannels
   preserveMetadata: boolean
+  wavMetadataEncoding: WavMetadataEncoding
 }
 
 export interface AudioConversionRequest {
@@ -109,6 +111,7 @@ export const DEFAULT_AUDIO_OPTIONS: AudioConversionOptions = {
   sampleRate: 'original',
   channels: 'original',
   preserveMetadata: true,
+  wavMetadataEncoding: 'gbk',
 }
 
 export const EMPTY_AUDIO_METADATA: AudioMetadata = {

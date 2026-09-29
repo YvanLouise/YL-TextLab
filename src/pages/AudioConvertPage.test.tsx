@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AudioConversionEngine, AudioConversionResult } from '../features/audio-conversion/types'
+import { AudioConversionError } from '../features/audio-conversion/types'
 import { ThemeProvider } from '../theme/ThemeProvider'
 import { AudioConvertPage } from './AudioConvertPage'
 
@@ -163,6 +164,26 @@ describe('AudioConvertPage', () => {
     const downloadLink = screen.getByRole('link', { name: '下载文件' })
     expect(downloadLink).toHaveAttribute('download', 'second.mp3')
     expect(downloadLink.getAttribute('href')).toMatch(/^blob:audio-/)
+  })
+
+  it('passes the WAV compatibility encoding and withholds downloads when verification fails', async () => {
+    const user = userEvent.setup()
+    const engine = createEngine({ convert: vi.fn().mockRejectedValue(new AudioConversionError('METADATA_VERIFY_FAILED', '歌曲信息写入校验失败：歌曲标题。')) })
+    renderPage(engine)
+    await user.click(screen.getByRole('button', { name: /仅修改信息/ }))
+    fireEvent.change(screen.getByLabelText('选择音频文件'), {
+      target: { files: [new File([new TextEncoder().encode('RIFF1234WAVE')], 'track.wav', { type: 'audio/wav' })] },
+    })
+    await screen.findByText('等待转换')
+    expect(screen.getByLabelText('WAV 标签编码')).toHaveValue('gbk')
+    await user.selectOptions(screen.getByLabelText('WAV 标签编码'), 'utf-8')
+    await user.type(screen.getByLabelText('歌曲标题'), '中文标题')
+    await user.click(screen.getByRole('button', { name: /写入歌曲信息/ }))
+    expect(await screen.findByText('歌曲信息写入校验失败：歌曲标题。')).toBeVisible()
+    expect(screen.queryByRole('link', { name: /下载/ })).not.toBeInTheDocument()
+    expect(engine.convert).toHaveBeenCalledWith(expect.objectContaining({
+      options: expect.objectContaining({ mode: 'metadata-only', wavMetadataEncoding: 'utf-8' }),
+    }), expect.any(Function))
   })
 
   it('uses a ZIP archive only when multiple results are downloaded together', async () => {

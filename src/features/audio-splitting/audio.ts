@@ -8,6 +8,7 @@ import type {
 } from './types'
 
 export const VIDEO_ACCEPT = ['.mp4', '.mov', '.m4v', '.webm', '.mkv', '.avi'].join(',')
+export const MIN_SPLIT_SECONDS = 0.01
 
 const videoExtensionFormats: Record<string, VideoInputFormat> = {
   mp4: 'mp4',
@@ -73,9 +74,9 @@ export async function inspectSplitSource(file: File): Promise<AudioSplitSource> 
 }
 
 export function clampSplitRange(startSeconds: number, endSeconds: number, duration: number) {
-  const safeDuration = Math.max(0, duration)
-  const start = Math.max(0, Math.min(safeDuration, startSeconds))
-  const end = Math.max(start, Math.min(safeDuration, endSeconds))
+  const safeDuration = Number.isFinite(duration) ? Math.max(0, duration) : 0
+  const start = Math.max(0, Math.min(safeDuration, Number.isFinite(startSeconds) ? startSeconds : 0))
+  const end = Math.max(start, Math.min(safeDuration, Number.isFinite(endSeconds) ? endSeconds : safeDuration))
   return { start, end }
 }
 
@@ -89,13 +90,29 @@ export function formatPreciseTime(seconds: number) {
 }
 
 export function parsePreciseTime(value: string) {
+  if (!/^(?:\d+:[0-5]\d|\d+:[0-5]\d:[0-5]\d)(?:\.\d{1,3})?$/.test(value.trim())) return null
   const parts = value.trim().split(':')
-  if (parts.length < 2 || parts.length > 3) return null
+  const hasHours = parts.length === 3
   const seconds = Number(parts.pop())
   const minutes = Number(parts.pop())
   const hours = parts.length ? Number(parts.pop()) : 0
-  if (![hours, minutes, seconds].every(Number.isFinite) || hours < 0 || minutes < 0 || minutes >= 60 || seconds < 0 || seconds >= 60) return null
-  return hours * 3600 + minutes * 60 + seconds
+  if (![hours, minutes, seconds].every(Number.isFinite) || (hasHours && minutes >= 60)) return null
+  const total = hours * 3600 + minutes * 60 + seconds
+  return Number.isSafeInteger(Math.round(total * 1000)) ? total : null
+}
+
+export function normalizeSplitFileName(name: string, extension: string) {
+  const base = name.trim().replace(/\.(mp3|wav|wave|flac|m4a|aac|ogg|opus|wma|aiff?|mp4|mov|webm|mkv|avi)$/i, '')
+    // eslint-disable-next-line no-control-regex -- Remove control bytes from download names.
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/[. ]+$/, '').slice(0, 180) || 'audio'
+  const safe = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(base) ? `_${base}` : base
+  return `${safe}.${extension}`
+}
+
+export function clampWaveformView(start: number, span: number, duration: number) {
+  const size = Math.min(duration, Math.max(MIN_SPLIT_SECONDS, span))
+  const left = Math.max(0, Math.min(duration - size, start))
+  return { start: left, end: left + size }
 }
 
 export function splitExtension(inputFormat: AudioSplitInputFormat, outputFormat: AudioSplitOutputFormat) {
@@ -131,7 +148,11 @@ export function buildSplitCommand(
   startSeconds: number,
   endSeconds: number,
 ) {
-  const duration = Math.max(0, endSeconds - startSeconds)
+  if (![startSeconds, endSeconds].every(Number.isFinite) || startSeconds < 0
+    || Math.round(endSeconds * 1000) - Math.round(startSeconds * 1000) < 10) {
+    throw new AudioConversionError('INVALID_RANGE', '请选择至少 10 毫秒的有效音频范围。')
+  }
+  const duration = (Math.round(endSeconds * 1000) - Math.round(startSeconds * 1000)) / 1000
   const codec = outputFormat === 'wav'
     ? codecByFormat.wav
     : outputFormat === 'mp3'
@@ -139,10 +160,10 @@ export function buildSplitCommand(
       : codecByFormat[inputFormat as AudioInputFormat] ?? codecByFormat.mp3
   return [
     '-i', inputPath,
-    '-ss', startSeconds.toFixed(3),
-    '-t', duration.toFixed(3),
     '-map', '0:a:0',
     '-vn',
+    // Match the decoded waveform's sample timeline, not rounded container timestamps.
+    '-af', `asetpts=N/SR/TB,atrim=start=${startSeconds.toFixed(3)}:duration=${duration.toFixed(3)},asetpts=PTS-STARTPTS`,
     '-map_metadata', '0',
     ...codec,
     outputPath,
@@ -150,12 +171,12 @@ export function buildSplitCommand(
 }
 
 export function createWaveformPeaks(channelData: Float32Array, count = 240) {
-  if (!channelData.length || count <= 0) return []
-  const peaks = new Array<number>(count)
-  const blockSize = Math.max(1, Math.floor(channelData.length / count))
-  for (let index = 0; index < count; index += 1) {
-    const start = index * blockSize
-    const end = Math.min(channelData.length, start + blockSize)
+  if (!channelData.length || !Number.isFinite(count) || count < 1) return []
+  const size = Math.min(channelData.length, Math.floor(count))
+  const peaks = new Array<number>(size)
+  for (let index = 0; index < size; index += 1) {
+    const start = Math.floor(index * channelData.length / size)
+    const end = Math.floor((index + 1) * channelData.length / size)
     let peak = 0
     for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
       peak = Math.max(peak, Math.abs(channelData[sampleIndex]))

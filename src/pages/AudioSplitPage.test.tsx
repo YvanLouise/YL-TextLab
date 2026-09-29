@@ -1,8 +1,8 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AudioSplitEngine } from '../features/audio-splitting/types'
+import type { AudioSplitEngine, AudioSplitResult } from '../features/audio-splitting/types'
 import { ThemeProvider } from '../theme/ThemeProvider'
 import { AudioSplitPage } from './AudioSplitPage'
 
@@ -39,6 +39,14 @@ beforeEach(() => {
   HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
     scale: vi.fn(), clearRect: vi.fn(), fillRect: vi.fn(), fillStyle: '',
   }) as never
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(function (this: HTMLMediaElement) {
+    Object.defineProperty(this, 'paused', { configurable: true, value: true })
+    this.dispatchEvent(new Event('pause'))
+  })
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(async function (this: HTMLMediaElement) {
+    Object.defineProperty(this, 'paused', { configurable: true, value: false })
+    this.dispatchEvent(new Event('play'))
+  })
 })
 
 afterEach(() => {
@@ -47,6 +55,108 @@ afterEach(() => {
 })
 
 describe('AudioSplitPage', () => {
+  function testEngine() : AudioSplitEngine {
+    return { load: vi.fn().mockResolvedValue(undefined), probe: vi.fn().mockResolvedValue(10),
+      split: vi.fn().mockResolvedValue({ blob: new Blob(['audio']), fileName: 'segment.wav', durationMs: 1 }),
+      cancel: vi.fn(), dispose: vi.fn() }
+  }
+
+  async function upload() {
+    fireEvent.change(screen.getByLabelText('选择要处理的音频或视频文件'), { target: { files: [wavFile()] } })
+    await screen.findByText('tone.wav')
+  }
+
+  it('zooms, seeks with the keyboard, marks boundaries and preserves a custom name', async () => {
+    const user = userEvent.setup()
+    renderPage(testEngine())
+    await upload()
+    fireEvent.change(screen.getByLabelText('输出文件名'), { target: { value: '我的片段.wav' } })
+    fireEvent.keyDown(screen.getByRole('slider', { name: '播放位置' }), { key: 'ArrowRight', shiftKey: true })
+    await user.click(screen.getByRole('button', { name: '设为起点' }))
+    expect(screen.getByLabelText('开始时间')).toHaveValue('00:01.000')
+    expect(screen.getByLabelText('输出文件名')).toHaveValue('我的片段.wav')
+    await user.click(screen.getByRole('button', { name: '放大波形' }))
+    expect(screen.getByLabelText('波形视窗位置')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '显示全部' }))
+    expect(screen.queryByLabelText('波形视窗位置')).not.toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('输出格式'), 'mp3')
+    expect(screen.getByLabelText('输出文件名')).toHaveValue('我的片段.mp3')
+  })
+
+  it('loops the selected range, controls volume and stops at the exact end', async () => {
+    const user = userEvent.setup()
+    renderPage(testEngine())
+    await upload()
+    fireEvent.change(screen.getByLabelText('开始位置'), { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText('结束位置'), { target: { value: '4' } })
+    const audio = screen.getByLabelText('原音频试听') as HTMLAudioElement
+    fireEvent.change(screen.getByLabelText('试听音量'), { target: { value: '0.25' } })
+    expect(audio.volume).toBe(0.25)
+    await user.click(screen.getByRole('button', { name: '静音' }))
+    expect(audio.muted).toBe(true)
+    await user.click(screen.getByRole('button', { name: '循环试听' }))
+    await user.click(screen.getByRole('button', { name: '播放所选片段' }))
+    expect(audio.currentTime).toBe(2)
+    audio.currentTime = 4.05
+    fireEvent.timeUpdate(audio)
+    expect(audio.currentTime).toBe(2)
+    expect(audio.paused).toBe(false)
+    await user.click(screen.getByRole('button', { name: '循环试听' }))
+    audio.currentTime = 4.1
+    fireEvent.timeUpdate(audio)
+    expect(audio.paused).toBe(true)
+    expect(audio.currentTime).toBe(4)
+  })
+
+  it('keeps the source URL alive after results change and releases it on removal', async () => {
+    const user = userEvent.setup()
+    renderPage(testEngine())
+    await upload()
+    const source = (screen.getByLabelText('原音频试听') as HTMLAudioElement).src
+    await user.click(screen.getByRole('button', { name: '导出所选片段' }))
+    await screen.findByRole('link', { name: '下载片段' })
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(source)
+    fireEvent.change(screen.getByLabelText('开始位置'), { target: { value: '1' } })
+    expect(screen.queryByRole('link', { name: '下载片段' })).not.toBeInTheDocument()
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(source)
+    await user.click(screen.getByRole('button', { name: '移除文件' }))
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(source)
+  })
+
+  it('cancels an export, unlocks controls and ignores stale completion', async () => {
+    const user = userEvent.setup()
+    let finish!: (value: AudioSplitResult) => void
+    const engine = testEngine()
+    engine.split = vi.fn(() => new Promise<AudioSplitResult>(resolve => { finish = resolve }))
+    renderPage(engine)
+    await upload()
+    await user.click(screen.getByRole('button', { name: '导出所选片段' }))
+    await waitFor(() => expect(engine.split).toHaveBeenCalled())
+    expect(screen.getByLabelText('开始时间')).toBeDisabled()
+    expect(screen.getByRole('button', { name: '移除文件' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '取消导出' }))
+    expect(engine.cancel).toHaveBeenCalledOnce()
+    expect(screen.getByLabelText('开始时间')).toBeEnabled()
+    await act(async () => finish({ blob: new Blob(['late']), fileName: 'late.wav', durationMs: 1 }))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('已取消导出'))
+    expect(screen.queryByRole('link', { name: '下载片段' })).not.toBeInTheDocument()
+  })
+
+  it('disposes an engine that arrives after its loading operation was cancelled', async () => {
+    const user = userEvent.setup()
+    let finish!: () => void
+    const engine = testEngine()
+    engine.load = vi.fn(() => new Promise<void>(resolve => { finish = resolve }))
+    renderPage(engine)
+    await upload()
+    await user.click(screen.getByRole('button', { name: '导出所选片段' }))
+    await waitFor(() => expect(engine.load).toHaveBeenCalled())
+    await user.click(screen.getByRole('button', { name: '取消导出' }))
+    await act(async () => finish())
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('已取消导出'))
+    expect(engine.split).not.toHaveBeenCalled()
+  })
+
   it('loads audio, selects a range and exports the segment', async () => {
     const user = userEvent.setup()
     const engine: AudioSplitEngine = {

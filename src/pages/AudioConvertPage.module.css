@@ -120,6 +120,25 @@
   border-top: 1px solid var(--border-soft);
 }
 
+.wavEncoding {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  color: var(--text-strong);
+  font-size: 12px;
+}
+
+.wavEncoding select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-strong);
+  font: inherit;
+}
+
 .settingGroup > span,
 .settingGroup label > span {
   color: var(--text-strong);

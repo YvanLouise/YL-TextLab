@@ -47,7 +47,7 @@ const liveTools: ToolNavigationItem[] = [
   { id: 'replace', title: '关键词替换', icon: Search },
   { id: 'notionSplit', title: 'Notion 文本切分', icon: Rows3 },
   { id: 'pdf', title: 'PDF 查看', icon: FileText },
-  { id: 'image', title: '图片格式转换', icon: Images },
+  { id: 'image', title: '图片转换与压缩', icon: Images },
   { id: 'audio', title: '音频格式转换', icon: Music2 },
   { id: 'audioSplit', title: '音频分割与提取', icon: Scissors },
 ]
@@ -388,8 +388,8 @@ function ImageFeature() {
       <header className={styles.featureHeader}>
         <span className={styles.featureIcon}><Images aria-hidden="true" /></span>
         <div>
-          <h2>图片格式转换</h2>
-          <p>批量转换常用图片、应用图标与游戏纹理，全程在本机完成。</p>
+          <h2>图片转换与压缩</h2>
+          <p>批量转换常用图片、应用图标与游戏纹理，也可压缩 PNG、JPG、WebP 并设置目标大小。</p>
         </div>
         <Link className="button button-primary" to="/image-convert">
           打开工具 <ArrowRight aria-hidden="true" />
@@ -407,6 +407,15 @@ function ImageFeature() {
       </section>
 
       <Workflow items={imageWorkflow} />
+
+      <section className={styles.detailList} aria-labelledby="image-compression-title">
+        <header><Layers3 aria-hidden="true" /><h2 id="image-compression-title">图片压缩</h2></header>
+        <div className={styles.detailRows}>
+          <article><h3>保留格式或转换输出</h3><p>PNG、JPG、WebP 可保留原格式；其他可读取图片可选择输出为 JPG 或 WebP。</p></article>
+          <article><h3>目标大小与尺寸</h3><p>可设 1–50,000 KB 的目标，必要时按比例缩小尺寸；未达目标会明确标记。</p></article>
+          <article><h3>透明度与元数据</h3><p>PNG 无损重编码，WebP 保留透明度；JPG 按背景色合并透明区域，输出默认移除 EXIF。</p></article>
+        </div>
+      </section>
 
       <section className={styles.detailList} aria-labelledby="image-capability-title">
         <header><Layers3 aria-hidden="true" /><h2 id="image-capability-title">格式能力</h2></header>

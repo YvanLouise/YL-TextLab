@@ -114,9 +114,10 @@ test('features page presents live and planned tools', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'PDF 查看', level: 2 })).toBeVisible()
   await expect(page.getByRole('heading', { name: '查看能力' })).toBeVisible()
 
-  await page.getByRole('button', { name: '图片格式转换' }).click()
-  await expect(page.getByRole('heading', { name: '图片格式转换', level: 2 })).toBeVisible()
+  await page.getByRole('button', { name: '图片转换与压缩' }).click()
+  await expect(page.getByRole('heading', { name: '图片转换与压缩', level: 2 })).toBeVisible()
   await expect(page.getByRole('heading', { name: '格式能力' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '图片压缩' })).toBeVisible()
 
   await page.getByRole('button', { name: '音频格式转换' }).click()
   await expect(page.getByRole('heading', { name: '音频格式转换', level: 2 })).toBeVisible()

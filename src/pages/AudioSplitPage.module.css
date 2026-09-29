@@ -262,6 +262,8 @@
   inset: 0;
   width: 100%;
   height: 100%;
+  cursor: crosshair;
+  touch-action: none;
 }
 
 .selectionFill {
@@ -271,6 +273,7 @@
   bottom: 0;
   border-inline: 1px solid var(--primary);
   background: color-mix(in srgb, var(--primary) 9%, transparent);
+  pointer-events: none;
 }
 
 .playhead {
@@ -282,23 +285,6 @@
   background: var(--text-strong);
   pointer-events: none;
 }
-
-.handleLabel {
-  position: absolute;
-  z-index: 5;
-  bottom: -25px;
-  padding: 4px 7px;
-  border-radius: 6px;
-  background: var(--primary);
-  box-shadow: 0 4px 10px rgb(40 108 244 / 18%);
-  color: white;
-  font-size: 10px;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.startLabel { transform: translateX(-3px); }
-.endLabel { transform: translateX(calc(-100% + 3px)); }
 
 .range {
   position: absolute;
@@ -531,6 +517,99 @@
   to { transform: rotate(360deg); }
 }
 
+.waveformTools,
+.waveformTools > div,
+.selectionLabels,
+.panControl,
+.markControls,
+.exportProgress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.waveformTools {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.waveformTools > div { flex-wrap: wrap; }
+
+.waveformTools button,
+.playbackActions button,
+.markControls button,
+.exportProgress button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 36px;
+  padding: 6px 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.waveformTools svg,
+.playbackActions svg,
+.exportProgress svg { width: 16px; height: 16px; }
+
+.editor button:disabled,
+.sourceCard button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.playbackActions button[aria-pressed='true'] {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.selectionLabels {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  color: var(--primary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.waveformCanvas { margin-bottom: 10px; }
+
+.panControl { margin-top: 10px; color: var(--text-muted); font-size: 11px; }
+.panControl input { flex: 1; min-width: 0; accent-color: var(--primary); }
+.waveformHint { margin: 10px 0; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
+.playbackRow { flex-wrap: wrap; }
+.playbackInfo { min-width: 0; }
+.playbackInfo output { color: var(--primary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.playbackRow > .playbackActions { display: flex; align-items: center; gap: 7px; margin-left: auto; }
+.playbackActions input { width: 85px; min-width: 0; accent-color: var(--primary); }
+.markControls { flex-wrap: wrap; margin-top: 12px; color: var(--text-muted); font-size: 12px; }
+.markControls small { margin-left: auto; font-size: 11px; }
+.exportProgress { margin-top: 12px; }
+.exportProgress progress { flex: 1; min-width: 0; accent-color: var(--primary); }
+.exportProgress button { flex-shrink: 0; }
+.sourceCard > div { min-width: 0; flex: 1; }
+.sourceCard button { flex-shrink: 0; }
+.resultCard > div > div { min-width: 0; }
+.sourceCard h2 { overflow-wrap: anywhere; }
+.waveformCanvas canvas:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+@media (max-width: 520px) {
+  .waveformTools > span { width: 100%; }
+  .waveformTools button { min-height: 40px; padding: 6px 8px; font-size: 11px; }
+  .playbackRow > .playbackActions { margin-left: 0; width: 100%; justify-content: space-between; }
+  .playbackActions button { min-height: 40px; }
+  .playbackActions input { flex: 1; max-width: 100px; }
+  .playbackInfo { flex: 1; }
+  .playbackInfo span { overflow-wrap: anywhere; }
+  .markControls small { width: 100%; margin-left: 0; }
+}
+
 @media (max-width: 760px) {
   .workspace {
     padding-block: 18px 30px;
@@ -645,6 +724,8 @@
     flex: 0 0 auto;
   }
 
+  .sourceCard button span { display: none; }
+
   .editor {
     padding: 12px;
     box-shadow: none;
@@ -665,10 +746,6 @@
 
   .range::-webkit-slider-thumb {
     margin-top: 50px;
-  }
-
-  .handleLabel {
-    font-size: 9px;
   }
 
   .playbackRow {
@@ -694,12 +771,8 @@
     grid-column: auto;
   }
 
-  .resultCard > div {
-    width: calc(100% - 104px);
-  }
-
-  .resultCard :global(.button) {
-    margin-left: auto;
-  }
+  .resultCard { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .resultCard > div { width: 100%; }
+  .resultCard audio { order: 0; }
+  .resultCard :global(.button) { margin-left: 0; width: 100%; }
 }
-

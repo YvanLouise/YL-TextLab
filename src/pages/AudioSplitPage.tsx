@@ -13,6 +13,10 @@ import {
   Trash2,
   UploadCloud,
   Volume2,
+  VolumeX,
+  Repeat2,
+  SkipBack,
+  X,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ToolHeader } from '../components/SiteHeader'
@@ -25,6 +29,9 @@ import {
   inspectSplitSource,
   isLikelyVideoFile,
   parsePreciseTime,
+  normalizeSplitFileName,
+  splitExtension,
+  MIN_SPLIT_SECONDS,
   VIDEO_ACCEPT,
 } from '../features/audio-splitting/audio'
 import type {
@@ -36,6 +43,8 @@ import type {
   AudioSplitSourceKind,
 } from '../features/audio-splitting/types'
 import styles from './AudioSplitPage.module.css'
+import { AudioSplitWaveform } from './AudioSplitWaveform'
+import { useSelectionPlayback } from '../features/audio-splitting/useSelectionPlayback'
 
 interface AudioAnalysis {
   duration: number
@@ -53,9 +62,11 @@ function readNativeDuration(sourceUrl: string, sourceKind: AudioSplitSourceKind)
   return new Promise<number | null>((resolve) => {
     const media = sourceKind === 'video' ? document.createElement('video') : new Audio()
     let settled = false
+    const timeout = window.setTimeout(() => finish(null), 12000)
     const finish = (value: number | null) => {
       if (settled) return
       settled = true
+      window.clearTimeout(timeout)
       media.onloadedmetadata = null
       media.ontimeupdate = null
       media.onerror = null
@@ -84,7 +95,7 @@ const defaultAnalyzer: AudioAnalyzer = async (file, sourceUrl, sourceKind) => {
     const context = new AudioContextConstructor()
     try {
       const buffer = await context.decodeAudioData(await file.arrayBuffer())
-      return { duration: buffer.duration, peaks: createWaveformPeaks(buffer.getChannelData(0)) }
+      return { duration: buffer.duration, peaks: createWaveformPeaks(buffer.getChannelData(0), 8192) }
     } finally {
       await context.close()
     }
@@ -101,106 +112,6 @@ function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`
 }
 
-function drawWaveform(
-  canvas: HTMLCanvasElement,
-  peaks: number[],
-  selectionStart: number,
-  selectionEnd: number,
-) {
-  const width = Math.max(1, Math.round(canvas.clientWidth))
-  const height = Math.max(1, Math.round(canvas.clientHeight))
-  const ratio = window.devicePixelRatio || 1
-  canvas.width = Math.round(width * ratio)
-  canvas.height = Math.round(height * ratio)
-  const context = canvas.getContext('2d')
-  if (!context) return
-  context.scale(ratio, ratio)
-  context.clearRect(0, 0, width, height)
-  const center = height / 2
-  const values = peaks.length ? peaks : Array.from({ length: 160 }, (_, index) => 0.1 + Math.abs(Math.sin(index * 0.47)) * 0.18)
-  const barWidth = Math.max(1, width / values.length - 1)
-  values.forEach((peak, index) => {
-    const position = index / Math.max(1, values.length - 1)
-    const amplitude = Math.max(2, peak * height * 0.82)
-    context.fillStyle = position >= selectionStart && position <= selectionEnd ? '#286cf4' : '#aeb8c8'
-    context.fillRect(index * width / values.length, center - amplitude / 2, barWidth, amplitude)
-  })
-}
-
-interface WaveformProps {
-  peaks: number[]
-  duration: number
-  start: number
-  end: number
-  currentTime: number
-  onStartChange: (value: number) => void
-  onEndChange: (value: number) => void
-}
-
-function Waveform({ peaks, duration, start, end, currentTime, onStartChange, onEndChange }: WaveformProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const startRatio = duration ? start / duration : 0
-  const endRatio = duration ? end / duration : 1
-  const currentRatio = duration ? Math.min(1, currentTime / duration) : 0
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const render = () => drawWaveform(canvas, peaks, startRatio, endRatio)
-    render()
-    if (!('ResizeObserver' in globalThis)) {
-      window.addEventListener('resize', render)
-      return () => window.removeEventListener('resize', render)
-    }
-    const observer = new ResizeObserver(render)
-    observer.observe(canvas)
-    return () => observer.disconnect()
-  }, [peaks, startRatio, endRatio])
-
-  return (
-    <div className={styles.waveform}>
-      <div className={styles.timeScale} aria-hidden="true">
-        <span>00:00</span>
-        <span>{formatPreciseTime(duration / 2)}</span>
-        <span>{formatPreciseTime(duration)}</span>
-      </div>
-      <div className={styles.waveformCanvas}>
-        <canvas ref={canvasRef} aria-label="音频波形" />
-        <span
-          className={styles.selectionFill}
-          style={{ left: `${startRatio * 100}%`, width: `${Math.max(0, endRatio - startRatio) * 100}%` }}
-        />
-        <span className={styles.playhead} style={{ left: `${currentRatio * 100}%` }} />
-        <span className={`${styles.handleLabel} ${styles.startLabel}`} style={{ left: `${startRatio * 100}%` }}>
-          {formatPreciseTime(start)}
-        </span>
-        <span className={`${styles.handleLabel} ${styles.endLabel}`} style={{ left: `${endRatio * 100}%` }}>
-          {formatPreciseTime(end)}
-        </span>
-        <input
-          className={`${styles.range} ${styles.startRange}`}
-          type="range"
-          aria-label="开始位置"
-          min={0}
-          max={duration}
-          step={0.001}
-          value={start}
-          onChange={(event) => onStartChange(Number(event.target.value))}
-        />
-        <input
-          className={`${styles.range} ${styles.endRange}`}
-          type="range"
-          aria-label="结束位置"
-          min={0}
-          max={duration}
-          step={0.001}
-          value={end}
-          onChange={(event) => onEndChange(Number(event.target.value))}
-        />
-      </div>
-    </div>
-  )
-}
 
 interface AudioSplitPageProps {
   engineFactory?: AudioSplitEngineFactory
@@ -218,8 +129,6 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
   const [end, setEnd] = useState(0)
   const [startText, setStartText] = useState('00:00.000')
   const [endText, setEndText] = useState('00:00.000')
-  const [currentTime, setCurrentTime] = useState(0)
-  const [isPlaying, setIsPlaying] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [outputFormat, setOutputFormat] = useState<AudioSplitOutputFormat>('original')
   const [customOutputName, setCustomOutputName] = useState('')
@@ -232,22 +141,24 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
   const fileInputRef = useRef<HTMLInputElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const engineRef = useRef<AudioSplitEngine | null>(null)
+  const operationRef = useRef(0)
+  const busyRef = useRef(false)
+  const playback = useSelectionPlayback(audioRef, sourceUrl, start, end, duration, setNotice)
+  const { currentTime, isPlaying } = playback
 
   const releaseResult = useCallback(() => {
-    setResultUrl((current) => {
-      if (current) URL.revokeObjectURL(current)
-      return null
-    })
+    setResultUrl(null)
     setResult(null)
   }, [])
 
   useEffect(() => () => {
+    operationRef.current += 1
     engineRef.current?.dispose()
   }, [])
 
   const resetSource = () => {
-    audioRef.current?.pause()
-    if (sourceUrl) URL.revokeObjectURL(sourceUrl)
+    operationRef.current += 1
+    playback.stop()
     releaseResult()
     setFile(null)
     setInputFormat(null)
@@ -257,8 +168,8 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
     setPeaks([])
     setStart(0)
     setEnd(0)
-    setCurrentTime(0)
-    setIsPlaying(false)
+    playback.seek(0)
+    playback.setLoop(false)
     setCustomOutputName('')
     setNotice('请选择需要分割的音频，或需要提取音轨的视频。')
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -266,76 +177,86 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
 
   useEffect(() => () => {
     if (sourceUrl) URL.revokeObjectURL(sourceUrl)
+  }, [sourceUrl])
+  useEffect(() => () => {
     if (resultUrl) URL.revokeObjectURL(resultUrl)
-  }, [sourceUrl, resultUrl])
+  }, [resultUrl])
 
-  const getEngine = async () => {
+  const getEngine = async (operation: number) => {
     if (!engineRef.current) {
       const engine = await engineFactory()
-      await engine.load()
+      if (operation !== operationRef.current) { engine.dispose(); throw new Error('Cancelled') }
       engineRef.current = engine
     }
-    return engineRef.current
+    const engine = engineRef.current
+    await engine.load()
+    if (operation !== operationRef.current) throw new Error('Cancelled')
+    return engine
   }
 
   const loadFile = async (nextFile: File) => {
-    if (loading || exporting) return
+    if (busyRef.current) return
+    busyRef.current = true
+    const operation = ++operationRef.current
     setLoading(true)
     const likelyKind: AudioSplitSourceKind = isLikelyVideoFile(nextFile) ? 'video' : 'audio'
     setNotice(likelyKind === 'video' ? '正在读取视频音轨与时长。' : '正在读取音频与生成波形。')
-    audioRef.current?.pause()
-    if (sourceUrl) URL.revokeObjectURL(sourceUrl)
+    playback.stop()
     releaseResult()
     const nextUrl = URL.createObjectURL(nextFile)
     try {
-      const [source, analysis] = await Promise.all([
-        inspectSplitSource(nextFile),
-        analyzeAudio(nextFile, nextUrl, likelyKind).catch(async (error) => {
+      const source = await inspectSplitSource(nextFile)
+      const analysis = await analyzeAudio(nextFile, nextUrl, likelyKind).catch(async (error) => {
           if (likelyKind !== 'video') throw error
+          if (operation !== operationRef.current) throw error
           setNotice('浏览器正在使用本地引擎分析视频音轨，首次加载约 31 MB。')
-          const engine = await getEngine()
+          const engine = await getEngine(operation)
           return { duration: await engine.probe(nextFile), peaks: [] }
-        }),
-      ])
-      const initialEnd = analysis.duration
+        })
+      if (operation !== operationRef.current) { URL.revokeObjectURL(nextUrl); return }
+      if (!Number.isFinite(analysis.duration) || analysis.duration < MIN_SPLIT_SECONDS) throw new Error('Invalid duration')
+      const initialEnd = Math.floor(analysis.duration * 1000) / 1000
       setFile(nextFile)
       setInputFormat(source.format)
       setSourceKind(source.kind)
       setSourceUrl(nextUrl)
-      setDuration(analysis.duration)
+      setDuration(initialEnd)
       setPeaks(analysis.peaks)
       setStart(0)
       setEnd(initialEnd)
       setStartText(formatPreciseTime(0))
       setEndText(formatPreciseTime(initialEnd))
-      setCurrentTime(0)
+      playback.seek(0)
+      setCustomOutputName('')
       setOutputFormat(source.kind === 'video' ? 'mp3' : 'original')
       setNotice(source.kind === 'video'
         ? '已读取视频音轨。请选择区域并导出为 MP3 或 WAV。'
         : '拖动波形上的边界，或输入时间来选择需要提取的区域。')
     } catch (error) {
       URL.revokeObjectURL(nextUrl)
-      setNotice(describeAudioError(error))
+      if (operation === operationRef.current) setNotice(describeAudioError(error))
     } finally {
-      setLoading(false)
+      if (operation === operationRef.current) { busyRef.current = false; setLoading(false) }
     }
   }
 
   const updateStart = (value: number) => {
+    if (exporting) return
     const next = clampSplitRange(value, end, duration).start
     const bounded = Math.min(next, Math.max(0, end - 0.01))
     setStart(bounded)
     setStartText(formatPreciseTime(bounded))
-    setCustomOutputName('')
+    playback.stop()
     releaseResult()
   }
 
   const updateEnd = (value: number) => {
+    if (exporting) return
     const next = clampSplitRange(start, value, duration).end
     const bounded = Math.max(next, Math.min(duration, start + 0.01))
     setEnd(bounded)
     setEndText(formatPreciseTime(bounded))
-    setCustomOutputName('')
+    playback.stop()
     releaseResult()
   }
 
@@ -351,31 +272,18 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
     else updateEnd(parsed)
   }
 
-  const toggleSelectionPlayback = async () => {
-    const audio = audioRef.current
-    if (!audio) return
-    if (!audio.paused) {
-      audio.pause()
-      setIsPlaying(false)
-      return
-    }
-    if (audio.currentTime < start || audio.currentTime >= end) audio.currentTime = start
-    try {
-      await audio.play()
-      setIsPlaying(true)
-    } catch {
-      setNotice('浏览器暂时无法播放此音频格式，但仍可尝试导出所选片段。')
-    }
-  }
 
   const exportSelection = async () => {
-    if (!file || !inputFormat || end - start < 0.01 || exporting) return
+    if (!file || !inputFormat || Math.round((end - start) * 1000) < 10 || busyRef.current) return
+    busyRef.current = true
+    const operation = ++operationRef.current
+    playback.stop()
     setExporting(true)
     setProgress(0)
     releaseResult()
     setNotice('正在初始化本地分割引擎，首次加载约 31 MB。')
     try {
-      const engine = await getEngine()
+      const engine = await getEngine(operation)
       setNotice('正在提取所选音频区域。')
       const nextResult = await engine.split({
         file,
@@ -384,25 +292,37 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
         startSeconds: start,
         endSeconds: end,
         outputFormat,
-        fileName: outputName,
-      }, setProgress)
+        fileName: normalizeSplitFileName(outputName, splitExtension(inputFormat, outputFormat)),
+      }, (value) => { if (operation === operationRef.current) setProgress(value) })
+      if (operation !== operationRef.current) return
       const url = URL.createObjectURL(nextResult.blob)
       setResult(nextResult)
       setResultUrl(url)
       setNotice(sourceKind === 'video' ? '所选视频音轨已提取，可试听或下载。' : '所选片段已导出，可试听或下载。')
     } catch (error) {
-      setNotice(describeAudioError(error))
+      if (operation === operationRef.current) setNotice(describeAudioError(error))
     } finally {
-      setExporting(false)
+      if (operation === operationRef.current) { busyRef.current = false; setExporting(false) }
     }
   }
 
+  const cancelExport = () => {
+    operationRef.current += 1
+    engineRef.current?.cancel()
+    engineRef.current = null
+    busyRef.current = false
+    setExporting(false)
+    setProgress(0)
+    setNotice('已取消导出，选区和文件名已保留，可以重新导出。')
+  }
+
   const resetSelection = () => {
+    playback.stop()
+    playback.seek(0)
     setStart(0)
     setEnd(duration)
     setStartText(formatPreciseTime(0))
     setEndText(formatPreciseTime(duration))
-    setCurrentTime(0)
     releaseResult()
     setNotice(sourceKind === 'video' ? '已重置为完整视频时长。' : '已重置为完整音频范围。')
   }
@@ -465,49 +385,61 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
                 <h2>{file.name}</h2>
                 <p>{sourceKind === 'video' ? '视频' : '音频'} · {inputFormat?.toUpperCase()} · {formatBytes(file.size)} · {formatPreciseTime(duration)}</p>
               </div>
-              <button type="button" onClick={resetSource}><Trash2 aria-hidden="true" /> 移除文件</button>
+              <button type="button" aria-label="移除文件" title="移除文件" disabled={exporting} onClick={resetSource}><Trash2 aria-hidden="true" /><span>移除文件</span></button>
             </section>
 
             <section className={styles.editor} aria-labelledby="waveform-title">
               <header>
                 <div><AudioLines aria-hidden="true" /><h2 id="waveform-title">音频波形</h2></div>
-                <button type="button" onClick={resetSelection}><RefreshCcw aria-hidden="true" /> 重置选择</button>
+                <button type="button" disabled={exporting} onClick={resetSelection}><RefreshCcw aria-hidden="true" /> 重置选择</button>
               </header>
 
-              <Waveform
+              <AudioSplitWaveform
+                key={sourceUrl}
                 peaks={peaks}
                 duration={duration}
                 start={start}
                 end={end}
                 currentTime={currentTime}
+                disabled={exporting}
+                onSeek={playback.seek}
                 onStartChange={updateStart}
                 onEndChange={updateEnd}
               />
 
               <audio
+                aria-label="原音频试听"
                 ref={audioRef}
                 src={sourceUrl ?? undefined}
-                onTimeUpdate={(event) => {
-                  const audio = event.currentTarget
-                  setCurrentTime(audio.currentTime)
-                  if (audio.currentTime >= end) {
-                    audio.pause()
-                    setIsPlaying(false)
-                  }
-                }}
-                onPause={() => setIsPlaying(false)}
-                onEnded={() => setIsPlaying(false)}
+                onTimeUpdate={playback.sync}
+                onPlay={playback.onPlay}
+                onPause={playback.onPause}
+                onEnded={playback.sync}
               />
 
               <div className={styles.playbackRow}>
-                <button className={styles.playButton} type="button" aria-label={isPlaying ? '暂停所选片段' : '播放所选片段'} onClick={() => void toggleSelectionPlayback()}>
+                <button className={styles.playButton} type="button" disabled={exporting} aria-label={isPlaying ? '暂停所选片段' : '播放所选片段'} onClick={() => void playback.toggle()}>
                   {isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
                 </button>
-                <div>
+                <div className={styles.playbackInfo}>
                   <strong><Headphones aria-hidden="true" /> 试听所选片段</strong>
                   <span>{formatPreciseTime(start)} – {formatPreciseTime(end)}（{formatPreciseTime(selectionDuration)}）</span>
+                  <output role="timer" aria-live="off" aria-label="当前播放时间">{formatPreciseTime(currentTime)}</output>
                 </div>
-                <Volume2 aria-hidden="true" />
+                <div className={styles.playbackActions}>
+                  <button type="button" aria-label="回到选区起点" disabled={exporting} onClick={() => playback.seek(start)}><SkipBack /></button>
+                  <button type="button" aria-label="循环试听" aria-pressed={playback.loop} disabled={exporting} onClick={() => playback.setLoop(!playback.loop)}><Repeat2 /><span>循环</span></button>
+                  <button type="button" aria-label={playback.muted ? '取消静音' : '静音'} onClick={() => playback.setMuted(!playback.muted)}>{playback.muted || playback.volume === 0 ? <VolumeX /> : <Volume2 />}</button>
+                  <input type="range" aria-label="试听音量" min={0} max={1} step={0.01} value={playback.volume}
+                    onChange={(event) => { playback.setVolume(Number(event.target.value)); playback.setMuted(false) }} />
+                </div>
+              </div>
+
+              <div className={styles.markControls}>
+                <span>以当前播放位置标记</span>
+                <button type="button" disabled={exporting || currentTime > end - MIN_SPLIT_SECONDS} onClick={() => updateStart(currentTime)}>设为起点</button>
+                <button type="button" disabled={exporting || currentTime < start + MIN_SPLIT_SECONDS} onClick={() => updateEnd(currentTime)}>设为终点</button>
+                <small>音量和循环仅用于试听，不影响导出。</small>
               </div>
 
               <div className={styles.timeControls}>
@@ -515,6 +447,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
                   <span>开始时间</span>
                   <input
                     value={startText}
+                    disabled={exporting}
                     aria-label="开始时间"
                     onChange={(event) => setStartText(event.target.value)}
                     onBlur={() => commitTime('start')}
@@ -526,6 +459,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
                   <span>结束时间</span>
                   <input
                     value={endText}
+                    disabled={exporting}
                     aria-label="结束时间"
                     onChange={(event) => setEndText(event.target.value)}
                     onBlur={() => commitTime('end')}
@@ -543,7 +477,12 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
               <div className={styles.outputSettings}>
                 <label>
                   <span>输出格式</span>
-                  <select value={outputFormat} aria-label="输出格式" onChange={(event) => { setOutputFormat(event.target.value as AudioSplitOutputFormat); setCustomOutputName(''); releaseResult() }}>
+                  <select value={outputFormat} disabled={exporting} aria-label="输出格式" onChange={(event) => {
+                    const format = event.target.value as AudioSplitOutputFormat
+                    setOutputFormat(format)
+                    if (customOutputName && inputFormat) setCustomOutputName(normalizeSplitFileName(customOutputName, splitExtension(inputFormat, format)))
+                    releaseResult()
+                  }}>
                     {sourceKind === 'audio' ? <option value="original">保持原格式</option> : null}
                     <option value="mp3">MP3（通用高兼容）</option>
                     <option value="wav">WAV（PCM 无损）</option>
@@ -551,13 +490,17 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
                 </label>
                 <label className={styles.fileNameField}>
                   <span>输出文件名</span>
-                  <input value={outputName} aria-label="输出文件名" onChange={(event) => setCustomOutputName(event.target.value)} />
+                  <input value={outputName} disabled={exporting} maxLength={200} aria-label="输出文件名" onChange={(event) => { setCustomOutputName(event.target.value); releaseResult() }} />
                 </label>
-                <button className="button button-primary" type="button" disabled={exporting || selectionDuration < 0.01} onClick={() => void exportSelection()}>
+                <button className="button button-primary" type="button" disabled={exporting || Math.round(selectionDuration * 1000) < 10} onClick={() => void exportSelection()}>
                   {exporting ? <LoaderCircle className={styles.spinning} aria-hidden="true" /> : <Download aria-hidden="true" />}
                   {exporting ? `正在导出 ${progress}%` : sourceKind === 'video' ? '提取所选音频' : '导出所选片段'}
                 </button>
               </div>
+              {exporting ? <div className={styles.exportProgress}>
+                <progress aria-label="导出进度" max={100} value={progress} />
+                <button type="button" onClick={cancelExport}><X />取消导出</button>
+              </div> : null}
             </section>
 
             {result && resultUrl ? (

@@ -3,7 +3,7 @@ import wasmURL from '@ffmpeg/core/wasm?url'
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile } from '@ffmpeg/util'
 import { AudioConversionError } from '../audio-conversion/types'
-import { buildSplitCommand, splitExtension, splitMime } from './audio'
+import { buildSplitCommand, normalizeSplitFileName, splitExtension, splitMime } from './audio'
 import type { AudioSplitEngine, AudioSplitRequest, AudioSplitResult } from './types'
 
 function virtualName(prefix: string, extension: string) {
@@ -25,18 +25,26 @@ export class FfmpegAudioSplitEngine implements AudioSplitEngine {
   async load() {
     if (this.ffmpeg?.loaded) return
     if (this.loadingPromise) return this.loadingPromise
-    this.loadingPromise = (async () => {
+    const loading = (async () => {
       if (!('WebAssembly' in globalThis) || !('Worker' in globalThis)) {
         throw new AudioConversionError('ENGINE_UNAVAILABLE', '当前浏览器不支持本地音频分割所需的 WebAssembly 或 Worker。')
       }
       const ffmpeg = new FFmpeg()
-      await ffmpeg.load({ coreURL, wasmURL })
       this.ffmpeg = ffmpeg
+      try {
+        await ffmpeg.load({ coreURL, wasmURL })
+        if (this.ffmpeg !== ffmpeg) throw new Error('Cancelled')
+      } catch (error) {
+        if (this.ffmpeg === ffmpeg) this.ffmpeg = null
+        ffmpeg.terminate()
+        throw error
+      }
     })()
+    this.loadingPromise = loading
     try {
-      await this.loadingPromise
+      await loading
     } finally {
-      this.loadingPromise = null
+      if (this.loadingPromise === loading) this.loadingPromise = null
     }
   }
 
@@ -49,7 +57,8 @@ export class FfmpegAudioSplitEngine implements AudioSplitEngine {
     const inputPath = virtualName('probe-input', inputExtension)
     let maxTimeMicroseconds = 0
     const progressHandler = ({ time }: { time: number }) => {
-      if (Number.isFinite(time)) maxTimeMicroseconds = Math.max(maxTimeMicroseconds, time)
+      if (!Number.isFinite(time)) return
+      maxTimeMicroseconds = Math.max(maxTimeMicroseconds, time)
     }
     ffmpeg.on('progress', progressHandler)
     try {
@@ -89,8 +98,9 @@ export class FfmpegAudioSplitEngine implements AudioSplitEngine {
     const inputPath = virtualName('input', inputExtension)
     const outputPath = virtualName('output', outputExtension)
     let lastProgress = -1
-    const progressHandler = ({ progress }: { progress: number }) => {
-      const percent = Math.round(Math.max(0, Math.min(1, progress)) * 100)
+    const progressHandler = ({ time }: { time: number }) => {
+      if (!Number.isFinite(time)) return
+      const percent = Math.round(Math.max(0, Math.min(0.99, time / 1_000_000 / (request.endSeconds - request.startSeconds))) * 100)
       if (percent !== lastProgress) {
         lastProgress = percent
         onProgress?.(percent)
@@ -115,11 +125,11 @@ export class FfmpegAudioSplitEngine implements AudioSplitEngine {
         )
       }
       const data = await ffmpeg.readFile(outputPath)
-      if (typeof data === 'string') throw new AudioConversionError('INVALID_OUTPUT', '分割引擎未生成有效音频。')
+      if (typeof data === 'string' || !data.length) throw new AudioConversionError('INVALID_OUTPUT', '分割引擎未生成有效音频。')
       onProgress?.(100)
       return {
         blob: new Blob([new Uint8Array(data).buffer], { type: splitMime(request.inputFormat, request.outputFormat) }),
-        fileName: request.fileName,
+        fileName: normalizeSplitFileName(request.fileName, outputExtension),
         durationMs: performance.now() - startedAt,
       }
     } finally {

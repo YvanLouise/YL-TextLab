@@ -338,7 +338,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
       if (!cancelledRef.current) {
         setNotice(completed === ready.length
           ? options.mode === 'metadata-only'
-            ? `信息修改完成，共生成 ${completed} 个保持原音质的音频文件。`
+            ? `信息处理完成，共生成 ${completed} 个保持原音质的音频文件，填写的文本标签已回读校验。`
             : `转换完成，共生成 ${completed} 个音频文件。`
           : `已完成 ${completed} 个文件，失败项可查看具体原因。`)
       }
@@ -579,6 +579,23 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
               </div>
             </div>
           )}
+
+          {(metadataOnly ? items.some(item => item.inputFormat === 'wav') : options.format === 'wav') ? (
+            <div className={audioStyles.settingGroup}>
+              <label className={audioStyles.wavEncoding}>
+                <span>WAV 标签编码</span>
+                <select
+                  value={options.wavMetadataEncoding}
+                  disabled={busy}
+                  onChange={(event) => updateOptions({ wavMetadataEncoding: event.target.value as AudioConversionOptions['wavMetadataEncoding'] })}
+                >
+                  <option value="gbk">Windows 简体中文兼容（GBK）</option>
+                  <option value="utf-8">Unicode 通用（UTF-8）</option>
+                </select>
+              </label>
+              <small>GBK 适用于简体中文 Windows 属性页；其他系统或特殊字符可选 UTF-8，但 Windows 可能显示乱码。仅修改标签，不改变音质。</small>
+            </div>
+          ) : null}
 
           <div className={audioStyles.settingGroup}>
             <label className={audioStyles.metadataToggle}>

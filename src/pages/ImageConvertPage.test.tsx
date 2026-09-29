@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BrowserRouter } from 'react-router-dom'
 import { convertImage, createPreviewBlob, decodeImageFile } from '../features/image-conversion/engine'
+import { compressImage } from '../features/image-conversion/compression'
 import { ThemeProvider } from '../theme/ThemeProvider'
 import { ImageConvertPage } from './ImageConvertPage'
 
@@ -11,6 +12,8 @@ vi.mock('../features/image-conversion/engine', () => ({
   createPreviewBlob: vi.fn(),
   convertImage: vi.fn(),
 }))
+
+vi.mock('../features/image-conversion/compression', () => ({ compressImage: vi.fn() }))
 
 function renderPage() {
   return render(
@@ -21,6 +24,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks()
   let index = 0
   Object.defineProperty(URL, 'createObjectURL', {
     configurable: true,
@@ -41,6 +45,12 @@ beforeEach(() => {
     height: 360,
     durationMs: 2,
   })
+  vi.mocked(compressImage).mockImplementation(async (file, options) => ({
+    blob: new Blob(['compressed'], { type: 'image/webp' }),
+    fileName: `${file.name.replace(/\.[^.]+$/, '')}-compressed.webp`,
+    format: 'webp', width: 640, height: 360, durationMs: 3,
+    originalBytes: file.size, targetBytes: options.targetBytes, targetMet: options.targetBytes === null ? null : true,
+  }))
 })
 
 afterEach(() => {
@@ -81,9 +91,60 @@ describe('ImageConvertPage', () => {
     await user.click(screen.getByRole('button', { name: /开始转换/ }))
     expect(await screen.findByText('2 个文件转换完成')).toBeVisible()
 
-    await user.click(screen.getByRole('button', { name: '下载全部' }))
+    await user.click(screen.getByRole('button', { name: '下载全部 ZIP' }))
     await waitFor(() => expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled())
     await user.click(screen.getByRole('button', { name: '清空' }))
     expect(screen.getByText('0 / 20 个文件')).toBeVisible()
+  })
+
+  it('compresses one image, shows actual size, and downloads it directly', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(screen.getByRole('button', { name: '图片压缩' }))
+    fireEvent.change(screen.getByLabelText('选择图片文件'), { target: { files: [new File(['png-data'], 'hero.png', { type: 'image/png' })] } })
+    await screen.findByText('640 × 360')
+    await user.click(screen.getByRole('button', { name: /转为 WebP/ }))
+    await user.type(screen.getByLabelText('目标大小（可选）'), '10')
+    await user.click(screen.getByRole('button', { name: /开始压缩/ }))
+    expect(await screen.findByText('1 个文件处理完成')).toBeVisible()
+    expect(screen.getByRole('link', { name: /下载图片/ })).toHaveAttribute('download', 'hero-compressed.webp')
+    expect(compressImage).toHaveBeenCalledWith(expect.any(File), expect.objectContaining({ format: 'webp', targetBytes: 10 * 1024 }))
+  })
+
+  it('keeps uploads but invalidates previous results when mode or settings change', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    fireEvent.change(screen.getByLabelText('选择图片文件'), { target: { files: [new File(['png'], 'hero.png', { type: 'image/png' })] } })
+    await screen.findByText('640 × 360')
+    await user.click(screen.getByRole('button', { name: /开始转换/ }))
+    await screen.findByText('已完成')
+    await user.click(screen.getByRole('button', { name: '图片压缩' }))
+    expect(screen.getByText('1 / 20 个文件')).toBeVisible()
+    expect(screen.queryByRole('link', { name: '下载 hero.ico' })).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('目标大小（可选）'), '50001')
+    expect(screen.getByRole('button', { name: /开始压缩/ })).toBeDisabled()
+  })
+
+  it('continues a batch when one image cannot be compressed', async () => {
+    const user = userEvent.setup()
+    vi.mocked(compressImage).mockImplementation(async (file, options) => {
+      if (file.name === 'bad.png') throw new Error('无法压缩此图片')
+      return {
+        blob: new Blob(['ok'], { type: 'image/webp' }), fileName: 'good-compressed.webp', format: 'webp',
+        width: 640, height: 360, durationMs: 2, originalBytes: file.size,
+        targetBytes: options.targetBytes, targetMet: null,
+      }
+    })
+    renderPage()
+    await user.click(screen.getByRole('button', { name: '图片压缩' }))
+    fireEvent.change(screen.getByLabelText('选择图片文件'), { target: { files: [
+      new File(['bad'], 'bad.png', { type: 'image/png' }),
+      new File(['good'], 'good.png', { type: 'image/png' }),
+    ] } })
+    await waitFor(() => expect(screen.getAllByText('640 × 360')).toHaveLength(2))
+    await user.click(screen.getByRole('button', { name: /开始压缩/ }))
+    expect(await screen.findByText('无法压缩此图片')).toBeVisible()
+    expect(screen.getByRole('link', { name: '下载 good-compressed.webp' })).toBeVisible()
+    expect(compressImage).toHaveBeenCalledTimes(2)
   })
 })

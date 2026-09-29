@@ -160,12 +160,12 @@ export function HomePage() {
                   <span className={`${styles.iconBox} ${styles.activeIcon}`}>
                     <Images aria-hidden="true" />
                   </span>
-                  <h3>图片格式转换</h3>
+                  <h3>图片转换与压缩</h3>
                   <span className={styles.onlineBadge}>已上线</span>
                 </div>
-                <p>单张或批量转换常用图片、应用图标与游戏纹理格式，全程本地完成。</p>
+                <p>单张或批量转换图片格式、压缩体积并按需控制目标大小，全程本地完成。</p>
                 <ul>
-                  {['PNG / JPG / WebP / BMP', 'ICO 单尺寸与多尺寸', 'TGA 与 DDS 游戏格式', '批量转换与 ZIP 下载'].map((item) => (
+                  {['PNG / JPG / WebP 转换与压缩', 'ICO / TGA / DDS 格式转换', '目标大小与自动缩放', '单图直下与批量 ZIP'].map((item) => (
                     <li key={item}><Check aria-hidden="true" /> {item}</li>
                   ))}
                 </ul>

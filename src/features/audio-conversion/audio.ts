@@ -225,6 +225,7 @@ function codecArgs(options: AudioConversionOptions, outputFormat: AudioInputForm
     if (outputFormat === 'mp3') args.push('-id3v2_version', '3')
     if (outputFormat === 'm4a') args.push('-movflags', '+faststart')
     if (outputFormat === 'aac') args.push('-f', 'adts')
+    if (outputFormat === 'aiff') args.push('-write_id3v2', '1')
     return args
   }
   const bitrate = `${effectiveBitrateKbps(options)}k`

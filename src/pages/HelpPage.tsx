@@ -83,6 +83,14 @@ const faqs = [
     answer: '首版图片转换会读取 GIF 的第一帧并输出静态图片，不保留动画时间轴。',
   },
   {
+    question: '图片压缩后为什么没有变小？',
+    answer: '重新编码不保证文件一定变小，尤其是已优化的图片和无损 PNG。工具会显示实际增减比例；可以设置目标大小并允许自动缩小尺寸，或改用 JPG/WebP。',
+  },
+  {
+    question: '图片压缩会保留拍摄信息吗？',
+    answer: '不会。压缩模式重新编码像素，默认移除 EXIF 等拍摄元数据。PNG 和 WebP 保留透明度；转 JPG 时按选定背景色合并透明区域。',
+  },
+  {
     question: 'DDS 会保留压缩和 mipmap 吗？',
     answer: 'DDS 输入可读取 DXT1、DXT3、DXT5 和未压缩像素；输出为未压缩 RGBA8，仅包含最高分辨率图层。',
   },
@@ -126,7 +134,7 @@ export function HelpPage() {
           </div>
           <a href="#quick-start">快速开始</a>
           <a href="#notion-split">Notion 文本切分</a>
-          <a href="#image-convert">图片格式转换</a>
+          <a href="#image-convert">图片转换与压缩</a>
           <a href="#audio-convert">音频格式转换</a>
           <a href="#matching">匹配选项说明</a>
           <a href="#privacy">数据与草稿</a>
@@ -181,8 +189,9 @@ export function HelpPage() {
           </section>
 
           <section id="image-convert" className={styles.section}>
-            <h2>图片格式转换</h2>
-            <p className={styles.sectionLead}>单图与批量使用相同流程：添加图片、选择目标格式、执行转换并下载结果。</p>
+            <h2>图片转换与压缩</h2>
+            <p className={styles.sectionLead}>添加图片后选择格式转换或图片压缩；单图直接下载，多图可分别下载或打包 ZIP。图片只在本机浏览器中处理。</p>
+            <p>压缩默认保留 PNG、JPG、WebP 原格式；其他可读取格式请选 WebP 或 JPG。JPG/WebP 可调质量，PNG 保留格式时采用无损重新编码。目标大小可设为 1–50,000 KB，必要时自动按比例缩小；若无法达标或输出反而变大，文件行会明确显示。压缩结果默认移除 EXIF 等元数据。</p>
             <div className={styles.optionCards}>
               {imageFormats.map((format) => (
                 <article key={format.title}>
