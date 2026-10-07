@@ -38,6 +38,62 @@ export function ChangelogPage() {
           <article className={styles.release}>
             <aside className={styles.releaseMeta}>
               <span className={styles.timelineDot} />
+              <strong>v1.6.3</strong>
+              <time dateTime="2026-10-07">2026-10-07</time>
+              <span className={styles.releaseBadge}>文件夹无损压缩</span>
+            </aside>
+            <div className={styles.releaseNotes}>
+              <section>
+                <h2>新增与优化</h2>
+                <ul>
+                  <li><Check /> 整个文件夹递归导入 PNG/JPG/WebP，保留原文件名和子目录</li>
+                  <li><Check /> 支持新建结果文件夹输出，其他浏览器可下载目录 ZIP，不覆盖原文件</li>
+                  <li><Check /> 文件夹每批最多 500 张、总输入 500 MB；无损引擎不再解码完整像素画布</li>
+                  <li><Check /> 全流程后台 Worker 可随时终止，增加 PNG 校验与内存保护，ZIP 分块打包</li>
+                </ul>
+              </section>
+            </div>
+          </article>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}>
+              <span className={styles.timelineDot} />
+              <strong>v1.6.2</strong>
+              <time dateTime="2026-10-07">2026-10-07</time>
+              <span className={styles.releaseBadge}>无损压缩</span>
+            </aside>
+            <div className={styles.releaseNotes}>
+              <section>
+                <h2>新增</h2>
+                <ul>
+                  <li><Check /> PNG/JPG/WebP 无损优化，保留原格式、尺寸、透明度与图像数据</li>
+                  <li><Check /> PNG 后台优化压缩流，JPG/WebP 清理非显示信息，保留色彩配置和 EXIF</li>
+                  <li><Check /> 无损模式不降低画质或缩小尺寸，无法减小时如实提示并保留原内容</li>
+                </ul>
+              </section>
+            </div>
+          </article>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}>
+              <span className={styles.timelineDot} />
+              <strong>v1.6.1</strong>
+              <time dateTime="2026-09-29">2026-09-29</time>
+              <span className={styles.releaseBadge}>压缩体验</span>
+            </aside>
+            <div className={styles.releaseNotes}>
+              <section>
+                <h2>改进</h2>
+                <ul>
+                  <li><Check /> 目标大小搜索减少重复编码，并改进自动缩放路径</li>
+                  <li><Check /> 逐张生成轻量预览，增加质量预设、处理进度和停止操作</li>
+                  <li><Check /> 增加原图与结果对比、批量大小汇总及未达标和变大提示</li>
+                </ul>
+              </section>
+            </div>
+          </article>
+
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}>
+              <span className={styles.timelineDot} />
               <strong>v1.6.0</strong>
               <time dateTime="2026-09-29">2026-09-29</time>
               <span className={styles.releaseBadge}>图片压缩</span>

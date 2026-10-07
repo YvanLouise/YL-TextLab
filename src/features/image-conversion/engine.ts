@@ -144,8 +144,18 @@ async function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: n
   return blob
 }
 
-export function createPreviewBlob(image: DecodedImage) {
-  return canvasToBlob(putDecodedImage(image).canvas, 'image/png')
+export function createPreviewBlob(image: DecodedImage, maxEdge = 480) {
+  const source = putDecodedImage(image).canvas
+  const scale = Math.min(1, maxEdge / Math.max(image.width, image.height))
+  if (scale === 1) return canvasToBlob(source, 'image/png')
+  const { canvas, context } = createCanvas(
+    Math.max(1, Math.round(image.width * scale)),
+    Math.max(1, Math.round(image.height * scale)),
+  )
+  context.imageSmoothingEnabled = true
+  context.imageSmoothingQuality = 'high'
+  context.drawImage(source, 0, 0, canvas.width, canvas.height)
+  return canvasToBlob(canvas, 'image/png')
 }
 
 async function resizedPng(image: DecodedImage, size: number) {

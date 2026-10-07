@@ -17,6 +17,7 @@ export interface ImageConversionOptions {
 export type ImageCompressionFormat = 'original' | 'jpeg' | 'webp'
 
 export interface ImageCompressionOptions {
+  method?: 'standard' | 'lossless'
   format: ImageCompressionFormat
   quality: number
   targetBytes: number | null
@@ -42,12 +43,14 @@ export interface ImageConversionResult {
 }
 
 export interface ImageCompressionResult extends ImageConversionResult {
+  lossless?: boolean
   originalBytes: number
   targetBytes: number | null
   targetMet: boolean | null
 }
 
 export interface ImageQueueItem {
+  relativePath?: string
   id: string
   file: File
   inputFormat: ImageInputFormat | null
@@ -84,6 +87,7 @@ export const DEFAULT_IMAGE_OPTIONS: ImageConversionOptions = {
 }
 
 export const DEFAULT_COMPRESSION_OPTIONS: ImageCompressionOptions = {
+  method: 'standard',
   format: 'original',
   quality: 0.8,
   targetBytes: null,
@@ -94,5 +98,7 @@ export const DEFAULT_COMPRESSION_OPTIONS: ImageCompressionOptions = {
 export const ICO_SIZES: IcoSize[] = [16, 32, 48, 64, 128, 256]
 
 export const MAX_IMAGE_FILES = 20
+export const MAX_FOLDER_IMAGES = 500
+export const MAX_FOLDER_INPUT_BYTES = 500 * 1024 * 1024
 export const MAX_IMAGE_FILE_SIZE = 50 * 1024 * 1024
 export const MAX_IMAGE_DIMENSION = 8192

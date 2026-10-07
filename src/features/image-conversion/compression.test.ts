@@ -22,7 +22,29 @@ describe('image compression', () => {
     const result = await searchCompression(640, 360, 'webp', { quality: 0.8, targetBytes: 700, autoResize: false }, encode)
     expect(result.blob.size).toBeLessThanOrEqual(700)
     expect(encode.mock.calls[0][2]).toBe(0.8)
+    expect(encode.mock.calls.length).toBeLessThanOrEqual(5)
     expect(result.width).toBe(640)
+  })
+
+  it('tries full resolution first, then searches quality again after resizing', async () => {
+    const result = await searchCompression(1000, 500, 'webp', { quality: 0.9, targetBytes: 3000, autoResize: true },
+      async (width, height, quality) => blobOf(Math.round(width * height * (quality ?? 1) / 20)))
+    expect(result.width).toBeLessThan(1000)
+    expect(result.height).toBe(Math.round(result.width / 2))
+    expect(result.blob.size).toBeLessThanOrEqual(3000)
+  })
+
+  it('reports attempts and stops before further encodes when cancelled', async () => {
+    const controller = new AbortController()
+    const encode = vi.fn(async () => {
+      controller.abort()
+      return blobOf(300)
+    })
+    const onProgress = vi.fn()
+    await expect(searchCompression(512, 512, 'webp', { quality: 0.8, targetBytes: 100, autoResize: true },
+      encode, { signal: controller.signal, onProgress })).rejects.toThrow('已停止压缩')
+    expect(encode).toHaveBeenCalledTimes(1)
+    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ attempts: 1, width: 512 }))
   })
 
   it('does not apply quality to lossless PNG and reduces dimensions if needed', async () => {
