@@ -165,9 +165,10 @@ export function NotionSplitPage() {
     setMaxCharactersInput(String(DEFAULT_MAX_CHARACTERS))
     setPreferSemanticBoundaries(true)
     resetCopied()
-    setNotice('文本、切分结果和本机草稿已清空')
+    setNotice('正在清空本机草稿…')
     setStorageWarning(false)
     await clearNotionSplitDraft()
+    setNotice('文本、切分结果和本机草稿已清空')
   }
 
   const statusText = !maxCharactersValid

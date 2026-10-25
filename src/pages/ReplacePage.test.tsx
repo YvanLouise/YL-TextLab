@@ -74,6 +74,6 @@ describe('ReplacePage', () => {
     expect(await screen.findByDisplayValue('已保存原文')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '清空' }))
     await waitFor(() => expect(screen.getByRole('textbox', { name: '原始文本' })).toHaveValue(''))
-    expect(screen.getByText('内容和本机草稿已清空')).toBeInTheDocument()
+    expect(await screen.findByText('内容和本机草稿已清空')).toBeInTheDocument()
   })
 })

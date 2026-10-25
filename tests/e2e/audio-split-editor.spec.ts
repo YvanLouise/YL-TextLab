@@ -18,7 +18,7 @@ function wav(seconds = 5) {
 
 async function upload(page: Page, seconds = 5) {
   await page.goto('/audio-split')
-  await expect(page).toHaveTitle('YL文件工具箱')
+  await expect(page).toHaveTitle('音频分割与提取 · YL文件工具箱')
   await expect(page.getByRole('heading', { name: '音频分割与视频音轨提取', exact: true })).toBeVisible()
   await page.getByLabel('选择要处理的音频或视频文件').setInputFiles({ name: '剪辑测试.wav', mimeType: 'audio/wav', buffer: wav(seconds) })
   await expect(page.getByText('剪辑测试.wav', { exact: true })).toBeVisible()
@@ -140,12 +140,36 @@ test('exports OGG in its original format with the selected duration', async ({ p
   const link = page.getByRole('link', { name: '下载片段' })
   await expect(link).toBeVisible({ timeout: 60_000 })
   expect(await link.getAttribute('download')).toMatch(/\.ogg$/)
+  const pendingExport = page.waitForEvent('download')
+  await link.click()
+  const exported = await pendingExport
+  const ogg = await readFile((await exported.path())!)
+  const identification = 27 + ogg[26]
+  expect(ogg.toString('ascii', identification + 1, identification + 7)).toBe('vorbis')
+  const sampleRate = ogg.readUInt32LE(identification + 12)
+  const blockSize = 1 << (ogg[identification + 28] >> 4)
+  let finalGranule = 0n
+  let endOfStream = false
+  for (let offset = 0; offset < ogg.length;) {
+    expect(ogg.toString('ascii', offset, offset + 4)).toBe('OggS')
+    const segments = ogg[offset + 26]
+    const bodySize = ogg.subarray(offset + 27, offset + 27 + segments).reduce((sum, size) => sum + size, 0)
+    if (ogg[offset + 5] & 4) {
+      finalGranule = ogg.readBigUInt64LE(offset + 6)
+      endOfStream = true
+    }
+    offset += 27 + segments + bodySize
+    expect(offset).toBeLessThanOrEqual(ogg.length)
+  }
+  expect(endOfStream).toBe(true)
+  expect(Math.abs(Number(finalGranule) / sampleRate - 1.5)).toBeLessThanOrEqual(1 / sampleRate)
   const duration = await page.getByLabel('导出片段试听').evaluate(async (element: HTMLAudioElement) => {
     const context = new AudioContext()
     try { return (await context.decodeAudioData(await (await fetch(element.src)).arrayBuffer())).duration }
     finally { await context.close() }
   })
-  expect(duration).toBeCloseTo(1.5, 2)
+  // Browser decoders can retain Vorbis overlap padding; the EOS granule above must remain sample-accurate.
+  expect(Math.abs(duration - 1.5)).toBeLessThanOrEqual(blockSize / sampleRate)
 })
 
 test('extracts a selected region from a real video with an audio track', async ({ page }) => {

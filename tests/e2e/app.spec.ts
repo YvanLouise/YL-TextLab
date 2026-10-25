@@ -63,6 +63,7 @@ test('draft persists and clear removes it', async ({ page }) => {
   await page.reload()
   await expect(page.getByRole('textbox', { name: '原始文本' })).toHaveValue('本机草稿')
   await page.getByRole('button', { name: '清空' }).click()
+  await expect(page.getByText('内容和本机草稿已清空', { exact: true })).toBeVisible()
   await page.reload()
   await expect(page.getByRole('textbox', { name: '原始文本' })).toHaveValue('')
 })

@@ -173,8 +173,9 @@ export function ReplacePage() {
     setExecution(null)
     setErrors({})
     setResultEdited(false)
-    setNotice('内容和本机草稿已清空')
+    setNotice('正在清空本机草稿…')
     await clearReplacementDraft()
+    setNotice('内容和本机草稿已清空')
   }
 
   const handleCopy = async () => {
