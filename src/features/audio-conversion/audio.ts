@@ -137,14 +137,15 @@ export function validateAudioBatch(currentFiles: File[], additions: File[]) {
   }
   const accepted: File[] = []
   let total = currentFiles.reduce((sum, file) => sum + file.size, 0)
-  for (const file of additions.slice(0, room)) {
-    if (file.size > MAX_AUDIO_FILE_SIZE) continue
-    if (total + file.size > MAX_AUDIO_BATCH_SIZE) break
+  for (const file of additions) {
+    if (accepted.length >= room) break
+    if (!file.size || file.size > MAX_AUDIO_FILE_SIZE) continue
+    if (total + file.size > MAX_AUDIO_BATCH_SIZE) continue
     accepted.push(file)
     total += file.size
   }
   if (!accepted.length && additions.length) {
-    throw new AudioConversionError('BATCH_SIZE_LIMIT', '单批音频总大小不能超过 500 MB，单个文件不能超过 100 MB。')
+    throw new AudioConversionError('BATCH_SIZE_LIMIT', '文件不能为空；单批音频总大小不能超过 500 MB，单个文件不能超过 100 MB。')
   }
   return {
     accepted,
@@ -238,7 +239,8 @@ function codecArgs(options: AudioConversionOptions, outputFormat: AudioInputForm
     case 'ogg': return options.qualityMode === 'custom'
       ? ['-c:a', 'libvorbis', '-b:a', bitrate]
       : ['-c:a', 'libvorbis', '-q:a', oggQuality[options.quality]]
-    case 'opus': return ['-c:a', 'libopus', '-b:a', bitrate!, '-vbr', 'on']
+    // Complexity 5+ enters a stereo analysis path that crashes the bundled WASM core.
+    case 'opus': return ['-c:a', 'libopus', '-b:a', bitrate!, '-vbr', 'on', '-compression_level', '4']
   }
 }
 

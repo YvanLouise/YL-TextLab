@@ -1,8 +1,7 @@
 import { Zip, ZipPassThrough } from 'fflate'
-import type { ImageExportEntry } from './folders'
-import { ImageConversionError } from './types'
+export interface FileExportEntry { path: string; blob: Blob }
 
-export async function createImageZip(entries: ImageExportEntry[], signal?: AbortSignal,
+export async function createZip(entries: FileExportEntry[], signal?: AbortSignal,
   onProgress?: (index: number, total: number, path: string) => void) {
   const chunks: ArrayBuffer[] = []
   let error: Error | null = null
@@ -10,7 +9,7 @@ export async function createImageZip(entries: ImageExportEntry[], signal?: Abort
     if (failure) error = failure
     else chunks.push(new Uint8Array(data).buffer)
   })
-  const checkAbort = () => { if (signal?.aborted) throw new ImageConversionError('CANCELLED', '已停止 ZIP 打包。') }
+  const checkAbort = () => { if (signal?.aborted) throw new DOMException('已停止 ZIP 打包。', 'AbortError') }
   try {
     for (const [index, entry] of entries.entries()) {
       checkAbort()

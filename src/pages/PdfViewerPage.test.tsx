@@ -44,6 +44,22 @@ afterEach(() => {
 })
 
 describe('PdfViewerPage', () => {
+  it('cancels an in-flight PDF load and unlocks file selection', async () => {
+    let signal: AbortSignal | undefined
+    vi.mocked(loadPdfDocument).mockImplementation((_data, nextSignal) => {
+      signal = nextSignal
+      return new Promise((_resolve, reject) => nextSignal?.addEventListener('abort', () => reject(new Error('Cancelled'))))
+    })
+    const user = userEvent.setup()
+    renderPageComponent()
+    await user.upload(screen.getByLabelText('选择 PDF 文件'), new File(['pdf'], 'large.pdf', { type: 'application/pdf' }))
+    await waitFor(() => expect(signal).toBeDefined())
+    await user.click(screen.getByRole('button', { name: '取消加载' }))
+    expect(signal!.aborted).toBe(true)
+    expect(screen.getByRole('button', { name: '选择 PDF' })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('opens a selected PDF, controls pages, and releases it when closed', async () => {
     const user = userEvent.setup()
     renderPageComponent()

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  decodeBmp,
   decodeDds,
   decodeTga,
   detectImageFormat,
@@ -37,6 +38,38 @@ describe('image format helpers', () => {
 })
 
 describe('binary encoders', () => {
+  it.each([1, 2, 127, 128, 129, 511])('round-trips mixed raw and repeated TGA packets at %i pixels', (width) => {
+    const data = Uint8ClampedArray.from({ length: width * 4 }, (_, index) =>
+      Math.floor(index / 4) % 150 < 130 ? 120 : (index * 31) % 256)
+    const source = { width, height: 1, data }
+    expect(decodeTga(encodeTga(source))).toEqual(source)
+  })
+
+  it('rejects oversized dimensions before allocating pixel buffers', () => {
+    const bmp = encodeBmp(image)
+    new DataView(bmp.buffer).setInt32(18, 8193, true)
+    const tga = encodeTga(image)
+    new DataView(tga.buffer).setUint16(12, 8193, true)
+    const dds = encodeDds(image)
+    new DataView(dds.buffer).setUint32(16, 8193, true)
+    for (const decode of [() => decodeBmp(bmp), () => decodeTga(tga), () => decodeDds(dds)]) {
+      expect(decode).toThrow(/8192/)
+    }
+  })
+
+  it('rejects truncated BMP, TGA and ICO pixel data instead of filling missing pixels', () => {
+    expect(() => decodeBmp(encodeBmp(image).slice(0, 55))).toThrow(/不完整/)
+    expect(() => decodeTga(encodeTga(image).slice(0, -1))).toThrow(/不完整/)
+    const ico = encodeIco([{ width: 2, height: 1, png: new Uint8Array(4) }])
+    expect(() => extractBestIcoEntry(ico)).toThrow(/不完整/)
+  })
+
+  it('rejects TGA RLE packets that overrun the declared image size', () => {
+    const tga = encodeTga(image)
+    tga[18] = 0xff
+    expect(() => decodeTga(tga)).toThrow(/不完整/)
+  })
+
   it('writes a 24-bit BMP header and dimensions', () => {
     const bytes = encodeBmp(image)
     const view = new DataView(bytes.buffer)

@@ -1,8 +1,9 @@
 {
   "name": "yl-text-tool",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.6.4",
   "type": "module",
+  "engines": { "node": "^20.19.0 || >=22.12.0" },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -10,7 +11,10 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "pretest:e2e": "npm run build",
     "test:e2e": "playwright test",
+    "check": "npm run lint && npm test && npm run build",
+    "clean": "node scripts/clean.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

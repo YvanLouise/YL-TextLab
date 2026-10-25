@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { unzipSync } from 'fflate'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -53,6 +54,7 @@ beforeEach(() => {
   })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+  vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined)
 })
 
 afterEach(() => {
@@ -61,6 +63,63 @@ afterEach(() => {
 })
 
 describe('AudioConvertPage', () => {
+  it('cancels a pending engine load, unlocks controls and ignores late completion', async () => {
+    let finishLoading = () => {}
+    const engine = createEngine({ load: vi.fn(() => new Promise<void>((resolve) => { finishLoading = resolve })) })
+    const user = userEvent.setup()
+    renderPage(engine)
+    fireEvent.change(screen.getByLabelText('选择音频文件'), { target: { files: [audioFile('track.mp3')] } })
+    await screen.findByText('等待转换')
+    await user.click(screen.getByRole('button', { name: /开始转换/ }))
+    await waitFor(() => expect(engine.load).toHaveBeenCalledOnce())
+    await user.click(screen.getByRole('button', { name: '停止转换' }))
+    expect(engine.cancel).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: '清空' })).toBeEnabled()
+    await act(async () => finishLoading())
+    expect(engine.convert).not.toHaveBeenCalled()
+    expect(screen.queryByText(/正在按顺序转换/)).not.toBeInTheDocument()
+  })
+
+  it('disposes a loading engine on unmount without creating a late result', async () => {
+    let finishLoading = () => {}
+    const engine = createEngine({ load: vi.fn(() => new Promise<void>((resolve) => { finishLoading = resolve })) })
+    const user = userEvent.setup()
+    const view = renderPage(engine)
+    fireEvent.change(screen.getByLabelText('选择音频文件'), { target: { files: [audioFile('track.mp3')] } })
+    await screen.findByText('等待转换')
+    await user.click(screen.getByRole('button', { name: /开始转换/ }))
+    await waitFor(() => expect(engine.load).toHaveBeenCalledOnce())
+    view.unmount()
+    expect(engine.dispose).toHaveBeenCalledOnce()
+    await act(async () => finishLoading())
+    expect(engine.convert).not.toHaveBeenCalled()
+  })
+
+  it('preserves every ZIP result when filenames collide with numbered originals', async () => {
+    const user = userEvent.setup()
+    const engine = createEngine({ convert: vi.fn()
+      .mockResolvedValueOnce({ ...result('song.mp3'), blob: new Blob(['first']) })
+      .mockResolvedValueOnce({ ...result('song.mp3'), blob: new Blob(['second']) })
+      .mockResolvedValueOnce({ ...result('song-2.mp3'), blob: new Blob(['third']) }) })
+    renderPage(engine)
+    fireEvent.change(screen.getByLabelText('选择音频文件'), {
+      target: { files: [audioFile('one.mp3'), audioFile('two.mp3'), audioFile('three.mp3')] },
+    })
+    await waitFor(() => expect(screen.getAllByText('等待转换')).toHaveLength(3))
+    await user.click(screen.getByRole('button', { name: /开始转换/ }))
+    await screen.findByText('3 个音频转换完成')
+    await user.click(screen.getByRole('button', { name: '下载全部' }))
+    let archive: Blob | undefined
+    await waitFor(() => {
+      archive = vi.mocked(URL.createObjectURL).mock.calls.map(([blob]) => blob as Blob)
+        .find((blob) => blob.type === 'application/zip')
+      expect(archive).toBeDefined()
+    })
+    const entries = unzipSync(new Uint8Array(await archive!.arrayBuffer()))
+    expect(Object.keys(entries).sort()).toEqual(['song-2.mp3', 'song-3.mp3', 'song.mp3'])
+    expect(new TextDecoder().decode(entries['song-3.mp3'])).toBe('second')
+  })
+
   it('loads audio, applies settings, converts and exposes the result', async () => {
     const user = userEvent.setup()
     const engine = createEngine()

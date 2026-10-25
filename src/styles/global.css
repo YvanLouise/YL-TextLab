@@ -177,6 +177,17 @@ a {
   border: 0;
 }
 
+.route-status {
+  padding-block: 80px;
+  color: var(--text-strong);
+}
+
+.route-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 @media (max-width: 700px) {
   .page-shell {
     max-width: calc(100% - 28px);

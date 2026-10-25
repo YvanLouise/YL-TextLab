@@ -54,13 +54,16 @@ export function PdfViewerPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const viewerRef = useRef<HTMLDivElement>(null)
   const loadingTaskRef = useRef<PDFDocumentLoadingTask | null>(null)
+  const loadControllerRef = useRef<AbortController | null>(null)
   const objectUrlRef = useRef('')
   const loadRequestRef = useRef(0)
   const dragDepthRef = useRef(0)
 
   const releaseDocument = useCallback(() => {
+    loadControllerRef.current?.abort()
+    loadControllerRef.current = null
     if (loadingTaskRef.current) {
-      void loadingTaskRef.current.destroy()
+      void loadingTaskRef.current.destroy().catch(() => undefined)
       loadingTaskRef.current = null
     }
     if (objectUrlRef.current) {
@@ -170,12 +173,15 @@ export function PdfViewerPage() {
     resetViewerState()
     setLoading(true)
     setError('')
+    const controller = new AbortController()
+    loadControllerRef.current = controller
 
     try {
       const data = await nextFile.arrayBuffer()
-      const loadedPdf = await loadPdfDocument(data)
+      if (requestId !== loadRequestRef.current) return
+      const loadedPdf = await loadPdfDocument(data, controller.signal)
       if (loadRequestRef.current !== requestId) {
-        void loadedPdf.loadingTask.destroy()
+        void loadedPdf.loadingTask.destroy().catch(() => undefined)
         return
       }
       const nextObjectUrl = URL.createObjectURL(nextFile)
@@ -267,6 +273,7 @@ export function PdfViewerPage() {
             <button className="button button-primary" type="button" disabled={loading} onClick={() => inputRef.current?.click()}>
               <FileText aria-hidden="true" /> 选择 PDF
             </button>
+            {loading ? <button className="button" type="button" onClick={closeFile}>取消加载</button> : null}
             <span className={styles.privacyNote}>仅支持本机 PDF · 文件不会上传</span>
           </section>
         ) : (

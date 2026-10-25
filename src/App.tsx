@@ -1,12 +1,14 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { ChangelogPage } from './pages/ChangelogPage'
-import { FeaturesPage } from './pages/FeaturesPage'
-import { HelpPage } from './pages/HelpPage'
+import { RouteBoundary } from './components/RouteBoundary'
 import { HomePage } from './pages/HomePage'
-import { NotionSplitPage } from './pages/NotionSplitPage'
-import { PdfViewerPage } from './pages/PdfViewerPage'
-import { ReplacePage } from './pages/ReplacePage'
+
+const ChangelogPage = lazy(() => import('./pages/ChangelogPage').then((module) => ({ default: module.ChangelogPage })))
+const FeaturesPage = lazy(() => import('./pages/FeaturesPage').then((module) => ({ default: module.FeaturesPage })))
+const HelpPage = lazy(() => import('./pages/HelpPage').then((module) => ({ default: module.HelpPage })))
+const NotionSplitPage = lazy(() => import('./pages/NotionSplitPage').then((module) => ({ default: module.NotionSplitPage })))
+const PdfViewerPage = lazy(() => import('./pages/PdfViewerPage').then((module) => ({ default: module.PdfViewerPage })))
+const ReplacePage = lazy(() => import('./pages/ReplacePage').then((module) => ({ default: module.ReplacePage })))
 
 const ImageConvertPage = lazy(() =>
   import('./pages/ImageConvertPage').then((module) => ({ default: module.ImageConvertPage })),
@@ -20,25 +22,35 @@ const AudioSplitPage = lazy(() =>
   import('./pages/AudioSplitPage').then((module) => ({ default: module.AudioSplitPage })),
 )
 
+const titles: Record<string, string> = {
+  '/features': '全部功能', '/replace': '关键词替换', '/notion-split': 'Notion 文本切分',
+  '/pdf': 'PDF 查看', '/image-convert': '图片转换与压缩', '/audio-convert': '音频格式转换',
+  '/audio-split': '音频分割与提取', '/help': '使用帮助', '/changelog': '更新日志',
+}
+
 function RouteEffects() {
   const location = useLocation()
 
   useEffect(() => {
-    if (location.hash) {
-      requestAnimationFrame(() =>
-        document.querySelector(location.hash)?.scrollIntoView({ behavior: 'smooth' }),
-      )
-    } else {
-      window.scrollTo({ top: 0 })
-    }
+    document.title = titles[location.pathname] ? `${titles[location.pathname]} · YL文件工具箱` : 'YL文件工具箱'
+    const frame = requestAnimationFrame(() => {
+      let id = location.hash.slice(1)
+      try { id = decodeURIComponent(id) } catch { /* Treat malformed URL fragments as literal IDs. */ }
+      const anchor = id ? document.getElementById(id) : null
+      if (anchor) anchor.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+      else window.scrollTo({ top: 0, behavior: 'instant' })
+    })
+    return () => cancelAnimationFrame(frame)
   }, [location.pathname, location.hash])
 
   return null
 }
 
 export default function App() {
+  const location = useLocation()
   return (
-    <>
+    <RouteBoundary key={location.pathname}>
+      <Suspense fallback={<main className="page-shell route-status" role="status"><h1>正在打开工具…</h1><p>请稍候，页面即将就绪。</p></main>}>
       <RouteEffects />
       <Routes>
         <Route path="/" element={<HomePage />} />
@@ -48,20 +60,21 @@ export default function App() {
         <Route path="/pdf" element={<PdfViewerPage />} />
         <Route
           path="/image-convert"
-          element={<Suspense fallback={<div className="page-shell">正在打开图片转换工具…</div>}><ImageConvertPage /></Suspense>}
+          element={<ImageConvertPage />}
         />
         <Route
           path="/audio-convert"
-          element={<Suspense fallback={<div className="page-shell">正在打开音频转换工具…</div>}><AudioConvertPage /></Suspense>}
+          element={<AudioConvertPage />}
         />
         <Route
           path="/audio-split"
-          element={<Suspense fallback={<div className="page-shell">正在打开音频分割工具…</div>}><AudioSplitPage /></Suspense>}
+          element={<AudioSplitPage />}
         />
         <Route path="/help" element={<HelpPage />} />
         <Route path="/changelog" element={<ChangelogPage />} />
         <Route path="*" element={<Navigate replace to="/" />} />
       </Routes>
-    </>
+      </Suspense>
+    </RouteBoundary>
   )
 }

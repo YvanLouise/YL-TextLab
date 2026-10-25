@@ -1,4 +1,4 @@
-import { ImageConversionError, type DecodedImage, type ImageInputFormat } from './types'
+import { ImageConversionError, validateImageDimensions, type DecodedImage, type ImageInputFormat } from './types'
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
 
@@ -98,6 +98,10 @@ export function decodeBmp(bytes: Uint8Array): DecodedImage {
     throw new ImageConversionError('UNSUPPORTED_BMP', '仅支持未压缩的 24/32 位 BMP。')
   }
   const rowStride = Math.ceil((width * (bpp / 8)) / 4) * 4
+  validateImageDimensions(width, height)
+  if (pixelOffset < 14 + view.getUint32(14, true) || pixelOffset + rowStride * height > bytes.length) {
+    throw new ImageConversionError('INVALID_BMP', 'BMP 像素数据不完整。')
+  }
   const data = new Uint8ClampedArray(width * height * 4)
   for (let y = 0; y < height; y += 1) {
     const sourceY = rawHeight > 0 ? height - 1 - y : y
@@ -125,21 +129,26 @@ function pixelsEqual(data: Uint8ClampedArray, a: number, b: number) {
   )
 }
 
-function pushTgaPixel(target: number[], data: Uint8ClampedArray, pixel: number) {
+function writeTgaPixel(target: Uint8Array, cursor: number, data: Uint8ClampedArray, pixel: number) {
   const offset = pixel * 4
-  target.push(data[offset + 2], data[offset + 1], data[offset], data[offset + 3])
+  target[cursor] = data[offset + 2]
+  target[cursor + 1] = data[offset + 1]
+  target[cursor + 2] = data[offset]
+  target[cursor + 3] = data[offset + 3]
+  return cursor + 4
 }
 
 export function encodeTga(image: DecodedImage) {
-  const body: number[] = []
   const pixelCount = image.width * image.height
+  const bytes = new Uint8Array(18 + pixelCount * 4 + Math.ceil(pixelCount / 128))
+  let cursor = 18
   let pixel = 0
   while (pixel < pixelCount) {
     let run = 1
     while (run < 128 && pixel + run < pixelCount && pixelsEqual(image.data, pixel, pixel + run)) run += 1
     if (run >= 2) {
-      body.push(0x80 | (run - 1))
-      pushTgaPixel(body, image.data, pixel)
+      bytes[cursor++] = 0x80 | (run - 1)
+      cursor = writeTgaPixel(bytes, cursor, image.data, pixel)
       pixel += run
       continue
     }
@@ -152,19 +161,17 @@ export function encodeTga(image: DecodedImage) {
       if (nextRun >= 2) break
       pixel += 1
     }
-    body.push(pixel - rawStart - 1)
-    for (let index = rawStart; index < pixel; index += 1) pushTgaPixel(body, image.data, index)
+    bytes[cursor++] = pixel - rawStart - 1
+    for (let index = rawStart; index < pixel; index += 1) cursor = writeTgaPixel(bytes, cursor, image.data, index)
   }
 
-  const bytes = new Uint8Array(18 + body.length)
   const view = new DataView(bytes.buffer)
   bytes[2] = 10
   view.setUint16(12, image.width, true)
   view.setUint16(14, image.height, true)
   bytes[16] = 32
   bytes[17] = 0x28
-  bytes.set(body, 18)
-  return bytes
+  return bytes.slice(0, cursor)
 }
 
 export function decodeTga(bytes: Uint8Array): DecodedImage {
@@ -182,15 +189,20 @@ export function decodeTga(bytes: Uint8Array): DecodedImage {
   }
 
   const pixelBytes = bpp / 8
+  validateImageDimensions(width, height)
   const raw = new Uint8Array(width * height * pixelBytes)
   let source = 18 + idLength
   let target = 0
+  const invalidPixels = () => new ImageConversionError('INVALID_TGA', 'TGA 像素数据不完整或 RLE 数据越界。')
   if (imageType === 2) {
+    if (source + raw.length > bytes.length) throw invalidPixels()
     raw.set(bytes.subarray(source, source + raw.length))
   } else {
     while (target < raw.length && source < bytes.length) {
       const packet = bytes[source++]
       const count = (packet & 0x7f) + 1
+      const payloadSize = (packet & 0x80) ? pixelBytes : count * pixelBytes
+      if (target + count * pixelBytes > raw.length || source + payloadSize > bytes.length) throw invalidPixels()
       if (packet & 0x80) {
         const pixelData = bytes.slice(source, source + pixelBytes)
         source += pixelBytes
@@ -205,6 +217,7 @@ export function decodeTga(bytes: Uint8Array): DecodedImage {
         target += length
       }
     }
+    if (target !== raw.length) throw invalidPixels()
   }
 
   const topOrigin = Boolean(descriptor & 0x20)
@@ -332,7 +345,7 @@ export function decodeDds(bytes: Uint8Array): DecodedImage {
   }
   const pixelFlags = view.getUint32(80, true)
   const fourCC = ascii(bytes, 84, 4)
-  const data = new Uint8ClampedArray(width * height * 4)
+  validateImageDimensions(width, height)
   let offset = 128
 
   if (pixelFlags & 0x4) {
@@ -343,6 +356,10 @@ export function decodeDds(bytes: Uint8Array): DecodedImage {
     }
     const blocksWide = Math.ceil(width / 4)
     const blocksHigh = Math.ceil(height / 4)
+    if (offset + blocksWide * blocksHigh * blockBytes > bytes.length) {
+      throw new ImageConversionError('INVALID_DDS', 'DDS 像素数据不完整。')
+    }
+    const data = new Uint8ClampedArray(width * height * 4)
     for (let blockY = 0; blockY < blocksHigh; blockY += 1) {
       for (let blockX = 0; blockX < blocksWide; blockX += 1) {
         if (offset + blockBytes > bytes.length) throw new ImageConversionError('INVALID_DDS', 'DDS 像素数据不完整。')
@@ -377,6 +394,10 @@ export function decodeDds(bytes: Uint8Array): DecodedImage {
   const pixelBytes = bpp / 8
   const pitch = view.getUint32(20, true)
   const rowStride = Math.max(width * pixelBytes, pitch || 0)
+  if (offset + rowStride * height > bytes.length) {
+    throw new ImageConversionError('INVALID_DDS', 'DDS 像素数据不完整。')
+  }
+  const data = new Uint8ClampedArray(width * height * 4)
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const source = offset + y * rowStride + x * pixelBytes
@@ -469,10 +490,11 @@ export function extractBestIcoEntry(bytes: Uint8Array): BestIcoEntry {
   const height = bytes[best + 1] || 256
   const size = view.getUint32(best + 8, true)
   const offset = view.getUint32(best + 12, true)
-  if (offset + size > bytes.length) throw new ImageConversionError('INVALID_ICO', 'ICO 图层数据不完整。')
+  if (offset < 6 + count * 16 || offset + size > bytes.length) throw new ImageConversionError('INVALID_ICO', 'ICO 图层数据不完整。')
   const payload = bytes.slice(offset, offset + size)
   if (hasBytes(payload, 0, PNG_SIGNATURE)) return { kind: 'png', bytes: payload, width, height }
 
+  if (payload.length < 40) throw new ImageConversionError('INVALID_ICO', 'ICO 图层数据不完整。')
   const dib = new DataView(payload.buffer, payload.byteOffset, payload.byteLength)
   const headerSize = dib.getUint32(0, true)
   const bpp = dib.getUint16(14, true)
@@ -484,6 +506,9 @@ export function extractBestIcoEntry(bytes: Uint8Array): BestIcoEntry {
   const pixelOffset = headerSize
   const maskStride = Math.ceil(width / 32) * 4
   const maskOffset = pixelOffset + rowStride * height
+  if (maskOffset > payload.length || (bpp === 24 && maskOffset + maskStride * height > payload.length)) {
+    throw new ImageConversionError('INVALID_ICO', 'ICO 像素或透明蒙版数据不完整。')
+  }
   const data = new Uint8ClampedArray(width * height * 4)
   let hasAlpha = false
   for (let y = 0; y < height; y += 1) {

@@ -6,3 +6,4 @@ test-results
 .vite
 *.tsbuildinfo
 /GitHub推送控制台/
+/tmp/

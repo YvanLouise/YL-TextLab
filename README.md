@@ -32,6 +32,19 @@ npm run build
 npm run test:e2e
 ```
 
+`npm run check` 可连续执行代码检查、单元测试和生产构建。`npm run test:e2e` 会先重新构建，再启动独立预览服务，覆盖桌面和移动端；本机使用已安装的 Chrome，CI 使用 Playwright Chromium。
+
+## 维护与清理
+
+当前版本为 1.6.4。工具页面按需加载；导航支持键盘与 Escape 关闭，页面加载失败可重试。音频引擎初始化和 PDF 加载可取消；音频批量 ZIP 分块生成并避免重名覆盖，打包期间也可停止。
+
+```powershell
+npm run clean -- --dry-run
+npm run clean
+```
+
+清理仅删除可重建的 `dist`、`test-results`、`playwright-report` 和 `coverage`，不删除源码、依赖、浏览器草稿或 GitHub 推送控制台。清理后可运行 `npm run dev`；使用预览服务前需重新执行 `npm run build`。`tmp` 为本机临时目录，不纳入版本控制。
+
 ## GitHub 推送
 
 双击 `GitHub推送控制台\一键打开GitHub推送控制台.cmd`。控制台已连接到本项目根目录，并使用 `origin` 远程仓库进行安全提交和推送。
@@ -40,7 +53,7 @@ npm run test:e2e
 
 ## 自动部署
 
-推送到 `main` 后，GitHub Actions 会自动执行 ESLint、Vitest 和生产构建，并将站点部署到 GitHub Pages：
+推送到 `main` 后，GitHub Actions 会自动执行 ESLint、Vitest、桌面与移动端 Playwright 测试和生产构建，并将站点部署到 GitHub Pages：
 
 <https://yvanlouise.github.io/YL-TextLab/>
 

@@ -102,3 +102,10 @@ export const MAX_FOLDER_IMAGES = 500
 export const MAX_FOLDER_INPUT_BYTES = 500 * 1024 * 1024
 export const MAX_IMAGE_FILE_SIZE = 50 * 1024 * 1024
 export const MAX_IMAGE_DIMENSION = 8192
+
+export function validateImageDimensions(width: number, height: number) {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 ||
+    width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+    throw new ImageConversionError('DIMENSION_LIMIT', '图片宽高必须在 1–8192 像素之间。')
+  }
+}

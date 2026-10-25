@@ -38,6 +38,27 @@ export function ChangelogPage() {
           <article className={styles.release}>
             <aside className={styles.releaseMeta}>
               <span className={styles.timelineDot} />
+              <strong>v1.6.4</strong>
+              <time dateTime="2026-10-25">2026-10-25</time>
+              <span className={styles.releaseBadge}>性能与稳定性</span>
+            </aside>
+            <div className={styles.releaseNotes}>
+              <section>
+                <h2>优化与修复</h2>
+                <ul>
+                  <li><Check /> 工具页面按需加载，缩小首页资源；加载失败可重新尝试</li>
+                  <li><Check /> 修复音频引擎加载期间的取消与资源释放，PDF 新增加载取消</li>
+                  <li><Check /> 修复 Opus 立体声转换与分割崩溃，保留所选声道及歌曲标签</li>
+                  <li><Check /> 音频 ZIP 分块打包、可停止，并避免同名与编号文件互相覆盖</li>
+                  <li><Check /> 提前校验图片尺寸和损坏数据，降低 TGA 编码内存占用</li>
+                  <li><Check /> 草稿保存等待事务提交，异常草稿不影响打开工具；导航支持完整键盘操作</li>
+                </ul>
+              </section>
+            </div>
+          </article>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}>
+              <span className={styles.timelineDot} />
               <strong>v1.6.3</strong>
               <time dateTime="2026-10-07">2026-10-07</time>
               <span className={styles.releaseBadge}>文件夹无损压缩</span>

@@ -86,7 +86,11 @@ export function executeReplacement(request: ReplacementRequest): ReplacementExec
 export function countVisibleCharacters(value: string): number {
   if (!value) return 0
   if (GRAPHEME_SEGMENTER) {
-    return Array.from(GRAPHEME_SEGMENTER.segment(value)).length
+    let count = 0
+    for (const segment of GRAPHEME_SEGMENTER.segment(value)) {
+      if (segment.segment) count += 1
+    }
+    return count
   }
   return Array.from(value).length
 }

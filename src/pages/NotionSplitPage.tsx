@@ -82,6 +82,11 @@ export function NotionSplitPage() {
   const [notice, setNotice] = useState('粘贴文本后将自动切分')
   const [hydrated, setHydrated] = useState(false)
   const [storageWarning, setStorageWarning] = useState(false)
+  const revisionRef = useRef(0)
+  const resetCopied = () => {
+    revisionRef.current += 1
+    setCopiedChunks(new Set())
+  }
 
   const parsedMaxCharacters = Number(maxCharactersInput)
   const maxCharactersValid = /^\d+$/.test(maxCharactersInput)
@@ -121,7 +126,7 @@ export function NotionSplitPage() {
       }
       setHydrated(true)
     })
-    return () => { cancelled = true }
+    return () => { cancelled = true; revisionRef.current += 1 }
   }, [])
 
   useEffect(() => {
@@ -142,12 +147,15 @@ export function NotionSplitPage() {
 
   const copyChunk = async (chunkIndex: number) => {
     const chunk = result.chunks.find((item) => item.index === chunkIndex)
-    if (!chunk) return
+    if (!chunk || processing) return
+    const revision = revisionRef.current
     try {
       await copyPlainText(chunk.text)
+      if (revision !== revisionRef.current) return
       setCopiedChunks((current) => new Set(current).add(chunkIndex))
       setNotice(`第 ${chunk.index + 1} 段已复制，可粘贴到 Notion`)
     } catch {
+      if (revision !== revisionRef.current) return
       setNotice(`第 ${chunk.index + 1} 段复制失败，请手动选择文本复制`)
     }
   }
@@ -156,7 +164,7 @@ export function NotionSplitPage() {
     setSource('')
     setMaxCharactersInput(String(DEFAULT_MAX_CHARACTERS))
     setPreferSemanticBoundaries(true)
-    setCopiedChunks(new Set())
+    resetCopied()
     setNotice('文本、切分结果和本机草稿已清空')
     setStorageWarning(false)
     await clearNotionSplitDraft()
@@ -196,7 +204,7 @@ export function NotionSplitPage() {
               spellCheck={false}
               onChange={(event) => {
                 setSource(event.target.value)
-                setCopiedChunks(new Set())
+                resetCopied()
               }}
             />
             <div className={styles.sourceSettings}>
@@ -215,7 +223,7 @@ export function NotionSplitPage() {
                       aria-describedby="notion-limit-help"
                       onChange={(event) => {
                         setMaxCharactersInput(event.target.value)
-                        setCopiedChunks(new Set())
+                        resetCopied()
                       }}
                     />
                     <span>字符</span>
@@ -234,7 +242,7 @@ export function NotionSplitPage() {
                     checked={preferSemanticBoundaries}
                     onChange={(event) => {
                       setPreferSemanticBoundaries(event.target.checked)
-                      setCopiedChunks(new Set())
+                      resetCopied()
                     }}
                   />
                   <span>优先按段落边界切分</span>

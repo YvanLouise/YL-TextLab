@@ -12,13 +12,22 @@ async function getPdfModule() {
   modulePromise ??= import('pdfjs-dist').then((pdfjs) => {
     pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
     return pdfjs
-  })
+  }).catch((error) => { modulePromise = null; throw error })
   return modulePromise
 }
 
-export async function loadPdfDocument(data: ArrayBuffer): Promise<LoadedPdfDocument> {
+export async function loadPdfDocument(data: ArrayBuffer, signal?: AbortSignal): Promise<LoadedPdfDocument> {
   const pdfjs = await getPdfModule()
+  signal?.throwIfAborted()
   const loadingTask = pdfjs.getDocument({ data })
-  const document = await loadingTask.promise
-  return { document, loadingTask }
+  const abort = () => { void loadingTask.destroy().catch(() => undefined) }
+  signal?.addEventListener('abort', abort, { once: true })
+  try {
+    const document = await loadingTask.promise
+    signal?.throwIfAborted()
+    return { document, loadingTask }
+  } catch (error) {
+    if (!signal?.aborted) await loadingTask.destroy().catch(() => undefined)
+    throw error
+  } finally { signal?.removeEventListener('abort', abort) }
 }

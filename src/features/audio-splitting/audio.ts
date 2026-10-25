@@ -50,7 +50,7 @@ const codecByFormat: Record<AudioInputFormat, string[]> = {
   m4a: ['-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart'],
   aac: ['-c:a', 'aac', '-b:a', '192k', '-f', 'adts'],
   ogg: ['-c:a', 'libvorbis', '-q:a', '5'],
-  opus: ['-c:a', 'libopus', '-b:a', '160k', '-vbr', 'on'],
+  opus: ['-c:a', 'libopus', '-b:a', '160k', '-vbr', 'on', '-compression_level', '4'],
   wma: ['-c:a', 'wmav2', '-b:a', '192k'],
   aiff: ['-c:a', 'pcm_s16be'],
 }

@@ -131,6 +131,15 @@ describe('audio conversion helpers', () => {
     expect(() => validateAudioBatch([], [tooLarge])).toThrow('500 MB')
   })
 
+  it('skips rejected inputs without using queue slots or hiding later files that fit', () => {
+    const file = (name: string, size: number) => Object.defineProperty(new File(['a'], name), 'size', { value: size })
+    const current = Array.from({ length: 19 }, (_, index) => file(`${index}.mp3`, 1))
+    const good = file('good.mp3', 10)
+    expect(validateAudioBatch(current, [file('large.mp3', 101 * 1024 * 1024), good]).accepted).toEqual([good])
+    const almostFull = [file('existing.mp3', 499 * 1024 * 1024)]
+    expect(validateAudioBatch(almostFull, [file('too-big.mp3', 2 * 1024 * 1024), good]).accepted).toEqual([good])
+  })
+
   it('formats durations for tracks and long recordings', () => {
     expect(formatAudioDuration(65)).toBe('1:05')
     expect(formatAudioDuration(3661)).toBe('1:01:01')

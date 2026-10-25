@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { ToolHeader } from '../components/SiteHeader'
+import { uniqueFileNames } from '../features/files/names'
 import {
   AUDIO_ACCEPT,
   OUTPUT_FORMATS,
@@ -78,14 +79,22 @@ function statusText(item: AudioQueueItem) {
   return item.inputFormat ? '等待转换' : '读取中'
 }
 
-function readAudioDuration(url: string) {
+function readAudioDuration(url: string, signal: AbortSignal) {
   return new Promise<number | null>((resolve) => {
     const audio = new Audio()
+    const timeout = window.setTimeout(() => finish(null), 15_000)
+    const abort = () => finish(null)
     const finish = (value: number | null) => {
+      window.clearTimeout(timeout)
+      signal.removeEventListener('abort', abort)
+      audio.onloadedmetadata = null
+      audio.onerror = null
       audio.removeAttribute('src')
       audio.load()
       resolve(value)
     }
+    if (signal.aborted) { finish(null); return }
+    signal.addEventListener('abort', abort, { once: true })
     audio.preload = 'metadata'
     audio.onloadedmetadata = () => finish(Number.isFinite(audio.duration) ? audio.duration : null)
     audio.onerror = () => finish(null)
@@ -103,23 +112,38 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
   const [dragging, setDragging] = useState(false)
   const [converting, setConverting] = useState(false)
   const [engineLoading, setEngineLoading] = useState(false)
+  const [packaging, setPackaging] = useState(false)
   const [notice, setNotice] = useState('请选择需要转换的音频文件。')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const engineRef = useRef<AudioConversionEngine | null>(null)
   const itemsRef = useRef(items)
-  const cancelledRef = useRef(false)
+  const operationRef = useRef(0)
+  const busyRef = useRef(false)
+  const mountedRef = useRef(true)
+  const archiveControllerRef = useRef<AbortController | null>(null)
+  const preparationRef = useRef(new Map<string, AbortController>())
 
   useEffect(() => {
     itemsRef.current = items
   }, [items])
 
-  useEffect(() => () => {
-    engineRef.current?.dispose()
-    itemsRef.current.forEach((item) => {
-      URL.revokeObjectURL(item.sourceUrl)
-      if (item.resultUrl) URL.revokeObjectURL(item.resultUrl)
-      if (item.coverUrl) URL.revokeObjectURL(item.coverUrl)
-    })
+  useEffect(() => {
+    mountedRef.current = true
+    const preparations = preparationRef.current
+    return () => {
+      mountedRef.current = false
+      operationRef.current += 1
+      engineRef.current?.dispose()
+      engineRef.current = null
+      archiveControllerRef.current?.abort()
+      preparations.forEach((controller) => controller.abort())
+      preparations.clear()
+      itemsRef.current.forEach((item) => {
+        URL.revokeObjectURL(item.sourceUrl)
+        if (item.resultUrl) URL.revokeObjectURL(item.resultUrl)
+        if (item.coverUrl) URL.revokeObjectURL(item.coverUrl)
+      })
+    }
   }, [])
 
   const updateOptions = (next: Partial<AudioConversionOptions>) => {
@@ -153,27 +177,30 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
   }
 
   const prepareItem = async (item: AudioQueueItem) => {
+    const controller = new AbortController()
+    preparationRef.current.set(item.id, controller)
     try {
       const format = await inspectAudioFile(item.file)
+      if (controller.signal.aborted) return
       setItems((current) => current.map((entry) => entry.id === item.id
         ? { ...entry, inputFormat: format }
         : entry))
-      void readAudioDuration(item.sourceUrl).then((duration) => {
-        setItems((current) => current.map((entry) => entry.id === item.id
-          ? { ...entry, duration }
-          : entry))
-      })
+      const duration = await readAudioDuration(item.sourceUrl, controller.signal)
+      if (!controller.signal.aborted) setItems((current) => current.map((entry) => entry.id === item.id
+        ? { ...entry, duration }
+        : entry))
     } catch (error) {
+      if (controller.signal.aborted) return
       setItems((current) => current.map((entry) => entry.id === item.id
         ? { ...entry, status: 'error', error: describeAudioError(error) }
         : entry))
-    }
+    } finally { preparationRef.current.delete(item.id) }
   }
 
   const addFiles = (files: File[]) => {
-    if (!files.length || converting) return
+    if (!files.length || busyRef.current) return
     try {
-      const { accepted, ignored } = validateAudioBatch(items.map((item) => item.file), files)
+      const { accepted, ignored } = validateAudioBatch(itemsRef.current.map((item) => item.file), files)
       const additions = accepted.map<AudioQueueItem>((file) => ({
         id: createId(),
         file,
@@ -190,7 +217,8 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
         coverFile: null,
         coverUrl: null,
       }))
-      setItems((current) => [...current, ...additions])
+      itemsRef.current = [...itemsRef.current, ...additions]
+      setItems(itemsRef.current)
       setNotice(ignored
         ? `已添加 ${accepted.length} 个文件，另有 ${ignored} 个文件因数量或大小限制被忽略。`
         : `已添加 ${accepted.length} 个文件，正在读取音频信息。`)
@@ -201,6 +229,9 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
   }
 
   const removeItem = (id: string) => {
+    if (busyRef.current) return
+    preparationRef.current.get(id)?.abort()
+    itemsRef.current = itemsRef.current.filter((item) => item.id !== id)
     setItems((current) => {
       const target = current.find((item) => item.id === id)
       if (target) URL.revokeObjectURL(target.sourceUrl)
@@ -211,12 +242,15 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
   }
 
   const clearAll = () => {
+    if (busyRef.current) return
+    preparationRef.current.forEach((controller) => controller.abort())
     items.forEach((item) => {
       URL.revokeObjectURL(item.sourceUrl)
       if (item.resultUrl) URL.revokeObjectURL(item.resultUrl)
       if (item.coverUrl) URL.revokeObjectURL(item.coverUrl)
     })
     setItems([])
+    itemsRef.current = []
     if (fileInputRef.current) fileInputRef.current.value = ''
     setNotice('列表已清空，音频文件不会保留。')
   }
@@ -267,17 +301,22 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
       : item))
   }
 
-  const getEngine = async () => {
+  const getEngine = async (operation: number) => {
     if (engineRef.current) return engineRef.current
     setEngineLoading(true)
     setNotice('正在初始化本地转换引擎，首次加载约 31 MB。')
     try {
       const engine = await engineFactory()
-      await engine.load()
+      if (operation !== operationRef.current) { engine.dispose(); throw new Error('Cancelled') }
       engineRef.current = engine
+      try { await engine.load() } catch (error) {
+        if (engineRef.current === engine) { engine.dispose(); engineRef.current = null }
+        throw error
+      }
+      if (operation !== operationRef.current) throw new Error('Cancelled')
       return engine
     } finally {
-      setEngineLoading(false)
+      if (operation === operationRef.current) setEngineLoading(false)
     }
   }
 
@@ -285,22 +324,25 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
     const ready = itemsRef.current.filter((item) =>
       item.inputFormat && ['queued', 'cancelled', 'done'].includes(item.status),
     )
-    if (!ready.length || converting) {
+    if (!ready.length || busyRef.current) {
       setNotice('请先添加可读取的音频文件。')
       return
     }
     setConverting(true)
-    cancelledRef.current = false
+    busyRef.current = true
+    const operation = ++operationRef.current
     let completed = 0
     try {
-      const engine = await getEngine()
+      const engine = await getEngine(operation)
+      if (operation !== operationRef.current) return
       setNotice(options.mode === 'metadata-only'
         ? `正在按顺序写入 ${ready.length} 个文件的歌曲信息。`
         : `正在按顺序转换 ${ready.length} 个文件。`)
       for (const item of ready) {
-        if (cancelledRef.current) break
+        if (operation !== operationRef.current) return
+        if (item.resultUrl) URL.revokeObjectURL(item.resultUrl)
         setItems((current) => current.map((entry) => entry.id === item.id
-          ? { ...entry, status: 'converting', progress: 0, error: null }
+          ? { ...entry, status: 'converting', progress: 0, error: null, result: null, resultUrl: null }
           : entry))
         try {
           const result = await engine.convert(
@@ -311,11 +353,13 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
               metadata: item.metadata,
               coverFile: item.coverFile,
             },
-            (progress) => setItems((current) => current.map((entry) => entry.id === item.id
-              ? { ...entry, progress }
-              : entry)),
+            (progress) => {
+              if (operation === operationRef.current) setItems((current) => current.map((entry) => entry.id === item.id
+                ? { ...entry, progress }
+                : entry))
+            },
           )
-          if (cancelledRef.current) break
+          if (operation !== operationRef.current) return
           const resultUrl = URL.createObjectURL(result.blob)
           setItems((current) => current.map((entry) => {
             if (entry.id !== item.id) return entry
@@ -324,18 +368,13 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
           }))
           completed += 1
         } catch (error) {
-          if (cancelledRef.current) {
-            setItems((current) => current.map((entry) => entry.id === item.id
-              ? { ...entry, status: 'cancelled', progress: 0 }
-              : entry))
-            break
-          }
+          if (operation !== operationRef.current) return
           setItems((current) => current.map((entry) => entry.id === item.id
             ? { ...entry, status: 'error', error: describeAudioError(error), progress: 0 }
             : entry))
         }
       }
-      if (!cancelledRef.current) {
+      if (operation === operationRef.current) {
         setNotice(completed === ready.length
           ? options.mode === 'metadata-only'
             ? `信息处理完成，共生成 ${completed} 个保持原音质的音频文件，填写的文本标签已回读校验。`
@@ -343,16 +382,22 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
           : `已完成 ${completed} 个文件，失败项可查看具体原因。`)
       }
     } catch (error) {
-      setNotice(describeAudioError(error))
+      if (operation === operationRef.current) setNotice(describeAudioError(error))
     } finally {
-      setConverting(false)
+      if (operation === operationRef.current) { busyRef.current = false; setConverting(false) }
     }
   }
 
   const cancelConversion = () => {
-    cancelledRef.current = true
+    operationRef.current += 1
     engineRef.current?.cancel()
     engineRef.current = null
+    busyRef.current = false
+    setConverting(false)
+    setEngineLoading(false)
+    setItems((current) => current.map((item) => item.status === 'converting'
+      ? { ...item, status: 'cancelled', progress: 0 }
+      : item))
     setNotice('已停止当前转换，等待项目可重新开始。')
   }
 
@@ -367,27 +412,33 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
 
   const downloadResults = async () => {
     const finished = items.filter((item) => item.result)
-    if (finished.length < 2) return
-
+    if (finished.length < 2 || busyRef.current) return
+    busyRef.current = true
+    setPackaging(true)
+    const controller = new AbortController()
+    archiveControllerRef.current = controller
     setNotice('正在生成 ZIP 压缩包。')
-    const { zipSync } = await import('fflate')
-    const entries: Record<string, Uint8Array> = {}
-    const duplicateCount = new Map<string, number>()
-    for (const item of finished) {
-      const result = item.result!
-      const seen = duplicateCount.get(result.fileName) ?? 0
-      duplicateCount.set(result.fileName, seen + 1)
-      const name = seen ? result.fileName.replace(/(\.[^.]+)$/, `-${seen + 1}$1`) : result.fileName
-      entries[name] = new Uint8Array(await result.blob.arrayBuffer())
+    try {
+      const { createZip } = await import('../features/files/zip')
+      const names = uniqueFileNames(finished.map((item) => item.result!.fileName))
+      const archive = await createZip(finished.map((item, index) => ({ path: names[index], blob: item.result!.blob })), controller.signal)
+      if (!mountedRef.current || controller.signal.aborted) return
+      const url = URL.createObjectURL(archive)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = 'YL-AudioLab-converted.zip'
+      anchor.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
+      setNotice(`已打包 ${finished.length} 个转换结果。`)
+    } catch {
+      if (mountedRef.current) setNotice(controller.signal.aborted
+        ? '已停止 ZIP 打包，处理结果仍保留。'
+        : 'ZIP 打包失败，请重试或单独下载。')
+    } finally {
+      archiveControllerRef.current = null
+      busyRef.current = false
+      if (mountedRef.current) setPackaging(false)
     }
-    const archive = zipSync(entries, { level: 0 })
-    const url = URL.createObjectURL(new Blob([new Uint8Array(archive).buffer], { type: 'application/zip' }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = 'YL-AudioLab-converted.zip'
-    anchor.click()
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-    setNotice(`已打包 ${finished.length} 个转换结果。`)
   }
 
   const completedCount = items.filter((item) => item.status === 'done').length
@@ -401,7 +452,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
     const estimate = estimateAudioOutputSize(item.duration, options)
     return estimate === null ? total : total + estimate
   }, 0)
-  const busy = converting || engineLoading
+  const busy = converting || engineLoading || packaging
 
   return (
     <div className={styles.page}>
@@ -775,9 +826,12 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
                   <Download aria-hidden="true" /> 下载文件
                 </a>
               ) : (
-                <button className="button button-primary" type="button" onClick={() => void downloadResults()}>
-                  <Archive aria-hidden="true" /> 下载全部
-                </button>
+                <>
+                  <button className="button button-primary" type="button" disabled={busy} onClick={() => void downloadResults()}>
+                    <Archive aria-hidden="true" /> {packaging ? '正在打包…' : '下载全部'}
+                  </button>
+                  {packaging ? <button className="button" type="button" onClick={() => archiveControllerRef.current?.abort()}>停止打包</button> : null}
+                </>
               )}
             </div>
           ) : null}

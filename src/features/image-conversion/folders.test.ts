@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { buildImageExportEntries, safeRelativePath, selectFolderImages, writeImageFolder, type OutputDirectory } from './folders'
-import { createImageZip } from './folder-zip'
+import { createZip as createImageZip } from '../files/zip'
 import { unzipSync } from 'fflate'
 
 function fileAt(path: string, size = 1) {

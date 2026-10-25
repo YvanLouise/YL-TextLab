@@ -38,18 +38,26 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
   async load() {
     if (this.ffmpeg?.loaded) return
     if (this.loadingPromise) return this.loadingPromise
-    this.loadingPromise = (async () => {
+    const loading = (async () => {
       if (!('WebAssembly' in globalThis) || !('Worker' in globalThis)) {
         throw new AudioConversionError('ENGINE_UNAVAILABLE', '当前浏览器不支持本地音频转换所需的 WebAssembly 或 Worker。')
       }
       const ffmpeg = new FFmpeg()
-      await ffmpeg.load({ coreURL, wasmURL })
       this.ffmpeg = ffmpeg
+      try {
+        await ffmpeg.load({ coreURL, wasmURL })
+        if (this.ffmpeg !== ffmpeg) throw new Error('Cancelled')
+      } catch (error) {
+        if (this.ffmpeg === ffmpeg) this.ffmpeg = null
+        ffmpeg.terminate()
+        throw error
+      }
     })()
+    this.loadingPromise = loading
     try {
-      await this.loadingPromise
+      await loading
     } finally {
-      this.loadingPromise = null
+      if (this.loadingPromise === loading) this.loadingPromise = null
     }
   }
 

@@ -1,8 +1,8 @@
 /// <reference types="node" />
 import { createRequire } from 'node:module'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { FfmpegAudioEngine } from './runtime'
@@ -44,6 +44,7 @@ vi.mock('@ffmpeg/ffmpeg', () => ({ FFmpeg: class {
 const metadata = { title: '天上晴云', artist: 'YvanLouise', album: '测试专辑', year: '2026', track: '3/12', genre: '流行', comment: '中文备注' }
 let fixture: Uint8Array
 let engine: FfmpegAudioEngine
+const temporaryDirectories: string[] = []
 
 function file(bytes: Uint8Array, name = 'source.wav') {
   return new File([new Uint8Array(bytes).buffer], name, { type: 'audio/wav' })
@@ -84,7 +85,14 @@ beforeEach(async () => {
   engine = new FfmpegAudioEngine()
 })
 
-afterEach(() => { engine?.dispose(); vi.unstubAllGlobals() })
+afterEach(() => {
+  engine?.dispose()
+  vi.unstubAllGlobals()
+  for (const directory of temporaryDirectories.splice(0)) {
+    if (dirname(resolve(directory)) !== resolve(tmpdir())) throw new Error('Unexpected test temporary directory')
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
 
 describe('real FFmpeg metadata pipeline', () => {
   it('round-trips Chinese WAV tags without changing any 24-bit PCM samples', async () => {
@@ -102,11 +110,15 @@ describe('real FFmpeg metadata pipeline', () => {
     expect(result.format).toBe(format)
   })
 
-  it('verifies Opus mono stream tags', async () => {
-    // The bundled 0.12.10 core has a separate stereo Opus encoder crash.
+  it.each(['mono', 'stereo', 'original'] as const)('verifies Opus %s stream tags', async (channels) => {
     const input = request('opus')
-    input.options.channels = 'mono'
-    expect((await engine.convert(input)).blob.size).toBeGreaterThan(100)
+    input.options.channels = channels
+    const output = await engine.convert(input)
+    expect(output.blob.size).toBeGreaterThan(100)
+    state.core!.FS.writeFile('verified.opus', await blobBytes(output.blob))
+    expect(state.core!.exec('-i', 'verified.opus', '-c:a', 'pcm_s16le', 'verified.wav')).toBe(0)
+    state.core!.reset()
+    expect(Buffer.from(state.core!.FS.readFile('verified.wav')).readUInt16LE(22)).toBe(channels === 'mono' ? 1 : 2)
   })
 
   it('round-trips escaped punctuation and multiline comments through real metadata export', async () => {
@@ -129,6 +141,7 @@ describe('real FFmpeg metadata pipeline', () => {
     const codePage = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '[System.Text.Encoding]::Default.CodePage'], { encoding: 'utf8', windowsHide: true }).trim()
     if (codePage !== '936') skip()
     const directory = mkdtempSync(join(tmpdir(), 'yl-wav-tags-'))
+    temporaryDirectories.push(directory)
     const result = await engine.convert(request())
     writeFileSync(join(directory, 'after.wav'), await blobBytes(result.blob))
     const script = `

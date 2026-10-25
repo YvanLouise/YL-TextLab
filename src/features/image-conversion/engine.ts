@@ -11,11 +11,12 @@ import {
   outputFileName,
   outputMime,
 } from './codecs'
+import { readLosslessInfo } from './lossless-info'
 import {
   ICO_SIZES,
   ImageConversionError,
-  MAX_IMAGE_DIMENSION,
   MAX_IMAGE_FILE_SIZE,
+  validateImageDimensions,
   type DecodedImage,
   type ImageConversionRequest,
   type ImageConversionResult,
@@ -23,6 +24,7 @@ import {
 } from './types'
 
 function createCanvas(width: number, height: number) {
+  validateImageDimensions(width, height)
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
@@ -41,16 +43,20 @@ async function decodeBrowserImage(blob: Blob): Promise<DecodedImage> {
   try {
     if ('createImageBitmap' in window) {
       const bitmap = await createImageBitmap(blob)
-      const { context } = createCanvas(bitmap.width, bitmap.height)
-      context.drawImage(bitmap, 0, 0)
-      bitmap.close()
-      return {
-        width: context.canvas.width,
-        height: context.canvas.height,
-        data: context.getImageData(0, 0, context.canvas.width, context.canvas.height).data,
+      try {
+        const { context } = createCanvas(bitmap.width, bitmap.height)
+        context.drawImage(bitmap, 0, 0)
+        return {
+          width: context.canvas.width,
+          height: context.canvas.height,
+          data: context.getImageData(0, 0, context.canvas.width, context.canvas.height).data,
+        }
+      } finally {
+        bitmap.close()
       }
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof ImageConversionError) throw error
     // The image element fallback covers browsers with partial createImageBitmap support.
   }
 
@@ -67,7 +73,8 @@ async function decodeBrowserImage(blob: Blob): Promise<DecodedImage> {
       height: image.naturalHeight,
       data: context.getImageData(0, 0, image.naturalWidth, image.naturalHeight).data,
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof ImageConversionError) throw error
     throw new ImageConversionError('DECODE_FAILED', '当前浏览器无法解码此图片。')
   } finally {
     URL.revokeObjectURL(url)
@@ -81,6 +88,11 @@ export async function decodeImageFile(file: File): Promise<{ format: ImageInputF
   const bytes = new Uint8Array(await file.arrayBuffer())
   const format = detectImageFormat(bytes, file.name)
   if (!format) throw new ImageConversionError('UNSUPPORTED_FORMAT', '无法识别此图片格式。')
+  if (format === 'png' || format === 'jpeg' || format === 'webp') readLosslessInfo(bytes)
+  if (format === 'gif' && bytes.length >= 10) {
+    const header = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    validateImageDimensions(header.getUint16(6, true), header.getUint16(8, true))
+  }
 
   let image: DecodedImage
   if (format === 'tga') image = decodeTga(bytes)
@@ -102,14 +114,7 @@ export async function decodeImageFile(file: File): Promise<{ format: ImageInputF
     }
   }
 
-  if (
-    image.width <= 0 ||
-    image.height <= 0 ||
-    image.width > MAX_IMAGE_DIMENSION ||
-    image.height > MAX_IMAGE_DIMENSION
-  ) {
-    throw new ImageConversionError('DIMENSION_LIMIT', '图片宽高必须在 1–8192 像素之间。')
-  }
+  validateImageDimensions(image.width, image.height)
   return { format, image }
 }
 

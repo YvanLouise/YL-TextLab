@@ -26,7 +26,7 @@
 .desktopNav {
   display: flex;
   align-self: stretch;
-  gap: 22px;
+  gap: 12px;
 }
 
 .navLink {
@@ -73,10 +73,6 @@
   gap: 14px;
 }
 
-.toolMenuButton {
-  display: none;
-}
-
 .menuButton {
   display: none;
   width: 42px;
@@ -87,6 +83,10 @@
   background: transparent;
   color: var(--text-strong);
   cursor: pointer;
+}
+
+.toolActions .toolMenuButton {
+  display: grid;
 }
 
 .menuButton:hover {
@@ -104,8 +104,18 @@
   inset: 0;
   display: flex;
   min-height: 100dvh;
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  margin: 0;
+  border: 0;
   justify-content: flex-end;
   background: rgb(6 18 38 / 38%);
+}
+
+.mobileLayer::backdrop {
+  background: transparent;
 }
 
 .mobileNav {
@@ -139,7 +149,8 @@
   text-decoration: none;
 }
 
-.mobileLink:hover {
+.mobileLink:hover,
+.mobileLink[aria-current='page'] {
   background: var(--surface-muted);
   color: var(--primary);
 }

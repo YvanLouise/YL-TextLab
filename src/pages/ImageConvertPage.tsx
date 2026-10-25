@@ -164,7 +164,7 @@ export function ImageConvertPage() {
   const prepareItem = async (item: ImageQueueItem) => {
     if (!mountedRef.current || !itemsRef.current.some((entry) => entry.id === item.id)) return
     try {
-      if (item.relativePath) {
+      if (item.relativePath || (mode === 'compress' && compressionOptions.method === 'lossless')) {
         const info = await inspectLosslessFile(item.file)
         if (!mountedRef.current) return
         setItems((current) => current.map((entry) => entry.id === item.id
@@ -366,8 +366,8 @@ export function ImageConvertPage() {
     abortRef.current = controller
     setNotice('正在生成 ZIP 压缩包。')
     try {
-      const { createImageZip } = await import('../features/image-conversion/folder-zip')
-      const archive = await createImageZip(buildImageExportEntries(finished, folderBatch), controller.signal, (index, total, path) => {
+      const { createZip } = await import('../features/files/zip')
+      const archive = await createZip(buildImageExportEntries(finished, folderBatch), controller.signal, (index, total, path) => {
         setProgress({ index: index + 1, total, file: path, detail: '正在分块打包 ZIP' })
       })
       if (!mountedRef.current) return
