@@ -12,6 +12,13 @@ function audioFile(name: string) {
   return new File([new Uint8Array([0x49, 0x44, 0x33, 0x04])], name, { type: 'audio/mpeg' })
 }
 
+function pcmFile(name = 'recording.wav') {
+  const bytes = new Uint8Array(1024)
+  bytes.set(new TextEncoder().encode('RIFF'), 0)
+  bytes.set(new TextEncoder().encode('WAVE'), 8)
+  return new File([bytes], name, { type: 'audio/wav' })
+}
+
 function result(fileName = 'track.flac'): AudioConversionResult {
   return {
     blob: new Blob(['converted'], { type: 'audio/flac' }),
@@ -63,6 +70,170 @@ afterEach(() => {
 })
 
 describe('AudioConvertPage', () => {
+  it('can stop folder scanning and subsequently drag a folder into lossless mode', async () => {
+    const user = userEvent.setup()
+    renderPage(createEngine())
+    const zone = screen.getByRole('heading', { name: '拖入多个音频或文件夹，或点击选择' }).parentElement!.parentElement!
+    const children = [pcmFile('song.wav'), new File(['notes'], 'notes.txt')].map(file => ({
+      name: file.name, isFile: true, isDirectory: false, file: (accept: (value: File) => void) => accept(file),
+    }))
+    let finish: (value: typeof children) => void = () => {}
+    const folder = { name: 'Album', isDirectory: true, isFile: false,
+      createReader: () => ({ readEntries: (resolve: typeof finish) => { finish = resolve } }) }
+    const dataTransfer = { items: [{ kind: 'file', webkitGetAsEntry: () => folder, getAsFile: () => null }], files: [] }
+    fireEvent.drop(zone, { dataTransfer })
+    await user.click(await screen.findByRole('button', { name: '停止读取' }))
+    await act(async () => finish(children))
+    expect(screen.queryByText('Album/song.wav')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '选择音频' })).toBeEnabled()
+    let read = false
+    folder.createReader = () => ({ readEntries: resolve => { const page = read ? [] : children; read = true; resolve(page) } })
+    fireEvent.drop(zone, { dataTransfer })
+    await screen.findByText('Album/song.wav')
+    expect(screen.getByRole('button', { name: '无损压缩' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('导入摘要')).toHaveTextContent('已添加 1 个音频。已忽略 1 个')
+  })
+
+  it('imports a folder into lossless mode and exports a single result with its original subdirectory', async () => {
+    const user = userEvent.setup()
+    const engine = createEngine({ convert: vi.fn().mockResolvedValue(result('song-无损.flac')) })
+    renderPage(engine)
+    const input = screen.getByLabelText('选择音频无损压缩文件夹')
+    expect(input).toHaveAttribute('webkitdirectory')
+    const track = Object.defineProperty(pcmFile('song.wav'), 'webkitRelativePath', { value: 'Album/Side A/song.wav' })
+    fireEvent.change(input, { target: { files: [track, new File(['notes'], 'notes.txt'), audioFile('song.mp3')] } })
+    await screen.findByText('等待转换')
+    expect(screen.getByRole('button', { name: '无损压缩' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('导入摘要')).toHaveTextContent('已添加 1 个音频。已忽略 2 个')
+    expect(screen.getByText('Album/Side A/song.wav')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: /开始无损压缩/ }))
+    await screen.findByText('1 个音频无损压缩完成')
+    await user.click(screen.getByRole('button', { name: '下载文件夹 ZIP' }))
+    let archive: Blob | undefined
+    await waitFor(() => {
+      archive = vi.mocked(URL.createObjectURL).mock.calls.map(([blob]) => blob as Blob).find(blob => blob.type === 'application/zip')
+      expect(archive).toBeDefined()
+    })
+    expect(Object.keys(unzipSync(new Uint8Array(await archive!.arrayBuffer())))).toEqual(['Album/Side A/song-无损.flac'])
+  })
+
+  it('continues past a failed file and retries only failed files without replacing completed results', async () => {
+    const user = userEvent.setup()
+    const engine = createEngine({ convert: vi.fn()
+      .mockResolvedValueOnce(result('one.flac'))
+      .mockRejectedValueOnce(new Error('Broken source'))
+      .mockResolvedValueOnce(result('three.flac'))
+      .mockResolvedValueOnce(result('two.flac')) })
+    renderPage(engine)
+    await user.click(screen.getByRole('button', { name: '无损压缩' }))
+    fireEvent.change(screen.getByLabelText('选择音频文件'), { target: { files: ['one', 'two', 'three'].map(name => pcmFile(`${name}.wav`)) } })
+    await waitFor(() => expect(screen.getAllByText('等待转换')).toHaveLength(3))
+    await user.click(screen.getByRole('button', { name: /开始无损压缩/ }))
+    await screen.findByText('2 个音频无损压缩完成')
+    const firstUrl = screen.getByRole('link', { name: '下载 one.flac' }).getAttribute('href')
+    expect(screen.getByLabelText('批量结果汇总')).toHaveTextContent('已完成 2/3 个文件，1 个失败')
+    expect(screen.getByRole('button', { name: /开始无损压缩/ })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '重试失败项（1）' }))
+    await screen.findByText('3 个音频无损压缩完成')
+    expect(vi.mocked(engine.convert).mock.calls.map(([request]) => request.file.name)).toEqual(['one.wav', 'two.wav', 'three.wav', 'two.wav'])
+    expect(screen.getByRole('link', { name: '下载 one.flac' })).toHaveAttribute('href', firstUrl)
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(firstUrl)
+  })
+
+  it('resumes an interrupted batch without recompressing completed files or accepting stale results', async () => {
+    let finish: (result: AudioConversionResult) => void = () => {}
+    const user = userEvent.setup()
+    const engine = createEngine({ convert: vi.fn()
+      .mockResolvedValueOnce(result('one.flac'))
+      .mockImplementationOnce(() => new Promise<AudioConversionResult>(resolve => { finish = resolve }))
+      .mockResolvedValueOnce(result('two.flac'))
+      .mockResolvedValueOnce(result('three.flac')) })
+    renderPage(engine)
+    await user.click(screen.getByRole('button', { name: '无损压缩' }))
+    fireEvent.change(screen.getByLabelText('选择音频文件'), { target: { files: ['one', 'two', 'three'].map(name => pcmFile(`${name}.wav`)) } })
+    await waitFor(() => expect(screen.getAllByText('等待转换')).toHaveLength(3))
+    await user.click(screen.getByRole('button', { name: /开始无损压缩/ }))
+    await waitFor(() => expect(engine.convert).toHaveBeenCalledTimes(2))
+    const firstUrl = screen.getByRole('link', { name: '下载 one.flac' }).getAttribute('href')
+    await user.click(screen.getByRole('button', { name: '停止压缩' }))
+    await user.click(screen.getByRole('button', { name: '开始无损压缩（2）' }))
+    await screen.findByText('3 个音频无损压缩完成')
+    await act(async () => finish(result('stale.flac')))
+    expect(screen.queryByRole('link', { name: '下载 stale.flac' })).not.toBeInTheDocument()
+    expect(vi.mocked(engine.convert).mock.calls.map(([request]) => request.file.name)).toEqual(['one.wav', 'two.wav', 'two.wav', 'three.wav'])
+    expect(screen.getByRole('link', { name: '下载 one.flac' })).toHaveAttribute('href', firstUrl)
+    expect(screen.getByRole('button', { name: /开始无损压缩/ })).toBeDisabled()
+  })
+
+  it('locks lossless parameters, shows actual savings and invalidates results when switching modes', async () => {
+    const user = userEvent.setup()
+    const output = { ...result('recording-无损.flac'), blob: new Blob([new Uint8Array(512)]),
+      lossless: { sampleRate: 48000, bitDepth: 24, channels: 2, sampleFrames: 48000, verified: true as const } }
+    const engine = createEngine({ convert: vi.fn().mockResolvedValue(output) })
+    renderPage(engine)
+    await user.selectOptions(screen.getByLabelText('采样率'), '44100')
+    await user.selectOptions(screen.getByLabelText('声道'), 'mono')
+    await user.click(screen.getByRole('button', { name: '无损压缩' }))
+    expect(screen.queryByLabelText('采样率')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('声道')).not.toBeInTheDocument()
+    expect(screen.queryByText('目标格式')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('选择音频文件'), { target: { files: [pcmFile()] } })
+    await screen.findByText('等待转换')
+    await user.click(screen.getByRole('button', { name: /开始无损压缩/ }))
+    await screen.findByText('1 个音频无损压缩完成')
+    expect(engine.convert).toHaveBeenCalledWith(expect.objectContaining({
+      options: expect.objectContaining({ mode: 'lossless', format: 'flac', sampleRate: 'original', channels: 'original' }),
+    }), expect.any(Function))
+    expect(screen.getByLabelText('recording.wav 的无损压缩结果')).toHaveTextContent('节省 512 B（50.0%）')
+    expect(screen.getByText(/采样校验通过 · 48 kHz · 24 位 · 2 声道/)).toBeVisible()
+    const url = screen.getByRole('link', { name: '下载 recording-无损.flac' }).getAttribute('href')
+    await user.click(screen.getByRole('button', { name: /^格式转换/ }))
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(url)
+    expect(screen.queryByRole('link', { name: '下载 recording-无损.flac' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('采样率')).toHaveValue('44100')
+    expect(screen.getByLabelText('声道')).toHaveValue('mono')
+  })
+
+  it('skips lossy files in mixed lossless batches and explains the limitation', async () => {
+    const engine = createEngine()
+    const user = userEvent.setup()
+    renderPage(engine)
+    fireEvent.change(screen.getByLabelText('选择音频文件'), { target: { files: [audioFile('lossy.mp3')] } })
+    await screen.findByText('等待转换')
+    await user.click(screen.getByRole('button', { name: '无损压缩' }))
+    expect(screen.getByText('不适用')).toBeVisible()
+    expect(screen.getByText(/不能恢复音质/)).toBeVisible()
+    expect(screen.getByRole('button', { name: /开始无损压缩/ })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('选择音频文件'), { target: { files: [pcmFile()] } })
+    await screen.findByText('等待转换')
+    await user.click(screen.getByRole('button', { name: '开始无损压缩（1）' }))
+    await screen.findByText('1 个音频无损压缩完成')
+    expect(engine.convert).toHaveBeenCalledOnce()
+    expect(engine.convert).toHaveBeenCalledWith(expect.objectContaining({ file: expect.objectContaining({ name: 'recording.wav' }) }), expect.any(Function))
+  })
+
+  it('reports larger outputs accurately and can cancel without accepting a stale lossless result', async () => {
+    let finish: (result: AudioConversionResult) => void = () => {}
+    const user = userEvent.setup()
+    const engine = createEngine({ convert: vi.fn(() => new Promise<AudioConversionResult>(resolve => { finish = resolve })) })
+    renderPage(engine)
+    await user.click(screen.getByRole('button', { name: '无损压缩' }))
+    fireEvent.change(screen.getByLabelText('选择音频文件'), { target: { files: [pcmFile()] } })
+    await screen.findByText('等待转换')
+    await user.click(screen.getByRole('button', { name: /开始无损压缩/ }))
+    await waitFor(() => expect(engine.convert).toHaveBeenCalledOnce())
+    expect(screen.getByRole('button', { name: '无损压缩' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: '停止压缩' }))
+    const output = { ...result('recording-无损.flac'), blob: new Blob([new Uint8Array(2048)]),
+      lossless: { sampleRate: 48000, bitDepth: 16, channels: 1, sampleFrames: 48000, verified: true as const } }
+    await act(async () => finish(output))
+    expect(screen.queryByRole('link', { name: '下载 recording-无损.flac' })).not.toBeInTheDocument()
+    vi.mocked(engine.convert).mockResolvedValue(output)
+    await user.click(screen.getByRole('button', { name: /开始无损压缩/ }))
+    await screen.findByText('1 个音频无损压缩完成')
+    expect(screen.getByLabelText('recording.wav 的无损压缩结果')).toHaveTextContent('体积增加 1.0 KB（100.0%）')
+  })
+
   it('cancels a pending engine load, unlocks controls and ignores late completion', async () => {
     let finishLoading = () => {}
     const engine = createEngine({ load: vi.fn(() => new Promise<void>((resolve) => { finishLoading = resolve })) })
@@ -215,7 +386,7 @@ describe('AudioConvertPage', () => {
     fireEvent.change(screen.getByLabelText('选择音频文件'), {
       target: { files: [audioFile('first.mp3'), audioFile('second.mp3')] },
     })
-    await waitFor(() => expect(screen.getByText('2 / 20 个文件')).toBeVisible())
+    await waitFor(() => expect(screen.getByText('2 / 100 个文件')).toBeVisible())
     await user.click(screen.getByRole('button', { name: /开始转换/ }))
 
     expect(await screen.findByText('1 个音频转换完成')).toBeVisible()
@@ -256,7 +427,7 @@ describe('AudioConvertPage', () => {
     fireEvent.change(screen.getByLabelText('选择音频文件'), {
       target: { files: [audioFile('first.mp3'), audioFile('second.mp3')] },
     })
-    await waitFor(() => expect(screen.getByText('2 / 20 个文件')).toBeVisible())
+    await waitFor(() => expect(screen.getByText('2 / 100 个文件')).toBeVisible())
     await user.click(screen.getByRole('button', { name: /开始转换/ }))
 
     expect(await screen.findByText('2 个音频转换完成')).toBeVisible()
@@ -286,6 +457,6 @@ describe('AudioConvertPage', () => {
 
     await user.click(screen.getByRole('button', { name: '清空' }))
     expect(URL.revokeObjectURL).toHaveBeenCalled()
-    expect(screen.getByText('0 / 20 个文件')).toBeVisible()
+    expect(screen.getByText('0 / 100 个文件')).toBeVisible()
   })
 })

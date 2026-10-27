@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { MAX_AUDIO_FILE_SIZE } from '../audio-conversion/types'
 import {
   buildSplitCommand,
   clampSplitRange,
@@ -12,6 +13,12 @@ import {
 } from './audio'
 
 describe('audio splitting helpers', () => {
+  it.each(['wav', 'mp4'] as const)('accepts a 500 MB %s source and rejects one byte more', async format => {
+    const file = (size: number) => Object.defineProperty(new File(['RIFF----WAVE'], `large.${format}`), 'size', { value: size })
+    await expect(inspectSplitSource(file(500 * 1024 * 1024))).resolves.toEqual({ kind: format === 'wav' ? 'audio' : 'video', format })
+    await expect(inspectSplitSource(file(MAX_AUDIO_FILE_SIZE + 1))).rejects.toThrow('单个音频或视频文件不能超过 500 MB')
+  })
+
   it('formats and parses precise timestamps', () => {
     expect(formatPreciseTime(86.25)).toBe('01:26.250')
     expect(formatPreciseTime(3661.005)).toBe('01:01:01.005')

@@ -440,7 +440,7 @@ function AudioFeature() {
         <span className={styles.featureIcon}><Music2 aria-hidden="true" /></span>
         <div>
           <h2>音频格式转换</h2>
-          <p>批量转换常用音乐格式，也可保持原音质仅修改歌曲信息。</p>
+          <p>多选音频或导入文件夹批量无损压缩，也可转换音乐格式或仅修改歌曲信息。</p>
         </div>
         <Link className="button button-primary" to="/audio-convert">
           打开工具 <ArrowRight aria-hidden="true" />
@@ -450,7 +450,7 @@ function AudioFeature() {
       <section className={`${styles.pdfPreview} ${styles.imagePreview}`} aria-labelledby="audio-preview-title">
         <span className={styles.pdfDocumentIcon}><Music2 aria-hidden="true" /></span>
         <h3 id="audio-preview-title">7 种目标格式自由选择</h3>
-        <p>本机完成转码，按格式设置码率、采样率与声道。</p>
+        <p>本机完成转码；无损压缩保留 16/24 位整数音频参数并校验全部采样。支持每批 100 个文件、保留子目录的 ZIP 和失败项重试。</p>
         <div className={styles.formatPreview} aria-label="支持的音频输出格式">
           {['MP3', 'WAV', 'FLAC', 'M4A', 'AAC', 'OGG', 'Opus'].map((format) => <span key={format}>{format}</span>)}
         </div>
@@ -482,7 +482,7 @@ function AudioSplitFeature() {
         <span className={styles.featureIcon}><Scissors aria-hidden="true" /></span>
         <div>
           <h2>音频分割与提取</h2>
-          <p>截取音频指定区域，或从视频中提取所选时间范围的音轨。</p>
+          <p>截取音频指定区域、提取视频音轨，或把立体声歌曲拆分为独立的左右声道文件。</p>
         </div>
         <Link className="button button-primary" to="/audio-split">
           打开工具 <ArrowRight aria-hidden="true" />
@@ -494,7 +494,7 @@ function AudioSplitFeature() {
         <h3 id="audio-split-preview-title">可视化选择音视频区域</h3>
         <p>拖动波形边界或输入毫秒级时间，导出前可直接试听所选音轨。</p>
         <div className={styles.formatPreview} aria-label="音频分割能力">
-          {['波形选择', '精确时间', '视频音轨', 'MP3', 'WAV'].map((item) => <span key={item}>{item}</span>)}
+          {['波形选择', '精确时间', '左右声道分离', '视频音轨', 'MP3', 'WAV'].map((item) => <span key={item}>{item}</span>)}
         </div>
         <Link className="button button-primary" to="/audio-split"><Scissors aria-hidden="true" /> 选择音视频</Link>
       </section>

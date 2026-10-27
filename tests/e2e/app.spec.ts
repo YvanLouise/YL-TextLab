@@ -287,7 +287,7 @@ test('converts a local WAV to MP3 without uploading audio', async ({ page, isMob
     { name: 'one.wav', mimeType: 'audio/wav', buffer: createTinyWav() },
     { name: 'two.wav', mimeType: 'audio/wav', buffer: createTinyWav() },
   ])
-  await expect(page.getByText('2 / 20 个文件')).toBeVisible()
+  await expect(page.getByText('2 / 100 个文件')).toBeVisible()
   await page.getByRole('button', { name: /开始转换/ }).click()
   await expect(page.getByText('2 个音频转换完成')).toBeVisible({ timeout: 120_000 })
   expect(externalMutations).toEqual([])

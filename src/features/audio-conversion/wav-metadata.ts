@@ -1,4 +1,5 @@
 import { AudioConversionError, type AudioMetadata, type WavMetadataEncoding } from './types'
+import { readAudioChunks } from './container'
 
 const utf8 = new TextEncoder()
 const fields: Record<keyof AudioMetadata, string> = {
@@ -118,10 +119,31 @@ function makeChunk(id: string, data: Uint8Array) {
 }
 
 export function readWavMetadata(bytes: Uint8Array): AudioMetadata {
-  const tags = infoTags(waveChunks(bytes))
+  return metadataFromTags(infoTags(waveChunks(bytes)))
+}
+
+function metadataFromTags(tags: Map<string, string>): AudioMetadata {
   return Object.fromEntries(Object.entries(fields).map(([field, tag]) => [field,
     tags.get(tag) ?? (field === 'track' ? tags.get('ITRK') : '') ?? '',
   ])) as unknown as AudioMetadata
+}
+
+export async function readWavFileMetadata(file: Blob): Promise<AudioMetadata> {
+  const { chunks } = await readAudioChunks(file, 'wav')
+  const parts: Chunk[] = []
+  let total = 0
+  for (const chunk of chunks) {
+    if (chunk.id !== 'LIST' && chunk.id !== 'CSET') continue
+    if (chunk.id === 'LIST') {
+      const kind = new Uint8Array(await file.slice(chunk.offset, chunk.offset + Math.min(4, chunk.size)).arrayBuffer())
+      if (ascii(kind, 0, 4) !== 'INFO') continue
+    }
+    total += chunk.size
+    if (total > 8 * 1024 * 1024) throw new AudioConversionError('METADATA_TOO_LARGE', '歌曲标签超过 8 MB，请关闭“保留歌曲标签”后重试。')
+    const data = new Uint8Array(await file.slice(chunk.offset, chunk.offset + chunk.size).arrayBuffer())
+    parts.push({ id: chunk.id, start: chunk.offset - 8, end: chunk.offset + chunk.size, data })
+  }
+  return metadataFromTags(infoTags(parts))
 }
 
 export function rewriteWavMetadata(bytes: Uint8Array, metadata: Partial<AudioMetadata>, encoding: WavMetadataEncoding, forFfmpeg = false) {

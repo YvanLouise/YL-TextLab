@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AudioSplitEngine, AudioSplitResult } from '../features/audio-splitting/types'
+import type { AudioChannelSplitResult, AudioSplitEngine, AudioSplitResult } from '../features/audio-splitting/types'
 import { ThemeProvider } from '../theme/ThemeProvider'
 import { AudioSplitPage } from './AudioSplitPage'
 
@@ -17,7 +17,7 @@ function videoFile() {
   return new File([new Uint8Array([0x1a, 0x45, 0xdf, 0xa3])], 'clip.webm', { type: 'video/webm' })
 }
 
-function renderPage(engine: AudioSplitEngine, useProbeFallback = false) {
+function renderPage(engine: AudioSplitEngine, useProbeFallback = false, channels = 2) {
   return render(
     <BrowserRouter>
       <ThemeProvider>
@@ -25,7 +25,7 @@ function renderPage(engine: AudioSplitEngine, useProbeFallback = false) {
           engineFactory={vi.fn().mockResolvedValue(engine)}
           analyzeAudio={useProbeFallback
             ? vi.fn().mockRejectedValue(new Error('浏览器无法读取视频时长'))
-            : vi.fn().mockResolvedValue({ duration: 10, peaks: [0.2, 0.8, 0.5] })}
+            : vi.fn().mockResolvedValue({ duration: 10, peaks: [0.2, 0.8, 0.5], channels })}
         />
       </ThemeProvider>
     </BrowserRouter>,
@@ -58,6 +58,10 @@ describe('AudioSplitPage', () => {
   function testEngine() : AudioSplitEngine {
     return { load: vi.fn().mockResolvedValue(undefined), probe: vi.fn().mockResolvedValue(10),
       split: vi.fn().mockResolvedValue({ blob: new Blob(['audio']), fileName: 'segment.wav', durationMs: 1 }),
+      separateChannels: vi.fn().mockResolvedValue([
+        { channel: 'left', blob: new Blob(['left']), fileName: 'tone_L.wav', durationMs: 1 },
+        { channel: 'right', blob: new Blob(['right']), fileName: 'tone_R.wav', durationMs: 1 },
+      ]),
       cancel: vi.fn(), dispose: vi.fn() }
   }
 
@@ -65,6 +69,55 @@ describe('AudioSplitPage', () => {
     fireEvent.change(screen.getByLabelText('选择要处理的音频或视频文件'), { target: { files: [wavFile()] } })
     await screen.findByText('tone.wav')
   }
+
+  it('exports two independent channel files and releases their URLs when settings change', async () => {
+    const user = userEvent.setup()
+    const engine = testEngine()
+    renderPage(engine)
+    await user.click(screen.getByRole('button', { name: '左右声道分离' }))
+    await upload()
+    expect(screen.getByLabelText('输出格式')).toHaveValue('wav')
+    expect(screen.getByLabelText('输出文件名')).toHaveValue('tone.wav')
+    await user.click(screen.getByRole('button', { name: '分离并导出左右声道' }))
+    const left = await screen.findByRole('link', { name: '下载左声道' })
+    const right = screen.getByRole('link', { name: '下载右声道' })
+    expect(left).toHaveAttribute('download', 'tone_L.wav')
+    expect(right).toHaveAttribute('download', 'tone_R.wav')
+    expect(engine.separateChannels).toHaveBeenCalledWith(expect.objectContaining({ startSeconds: 0, endSeconds: 10, outputFormat: 'wav' }), expect.any(Function))
+    expect(engine.split).not.toHaveBeenCalled()
+    const urls = [left.getAttribute('href'), right.getAttribute('href')]
+    await user.click(screen.getByRole('button', { name: '片段导出' }))
+    expect(screen.queryByLabelText('左右声道分离结果')).not.toBeInTheDocument()
+    urls.forEach(url => expect(URL.revokeObjectURL).toHaveBeenCalledWith(url))
+  })
+
+  it('rejects mono input without starting a channel export', async () => {
+    const user = userEvent.setup()
+    const engine = testEngine()
+    renderPage(engine, false, 1)
+    await upload()
+    await user.click(screen.getByRole('button', { name: '左右声道分离' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('此文件是单声道')
+    expect(screen.getByRole('button', { name: '分离并导出左右声道' })).toBeDisabled()
+    expect(engine.separateChannels).not.toHaveBeenCalled()
+  })
+
+  it('ignores a cancelled channel export and allows retry', async () => {
+    const user = userEvent.setup()
+    const engine = testEngine()
+    let finish!: (results: AudioChannelSplitResult[]) => void
+    vi.mocked(engine.separateChannels).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    renderPage(engine)
+    await upload()
+    await user.click(screen.getByRole('button', { name: '左右声道分离' }))
+    await user.click(screen.getByRole('button', { name: '分离并导出左右声道' }))
+    await waitFor(() => expect(engine.separateChannels).toHaveBeenCalledOnce())
+    await user.click(screen.getByRole('button', { name: '取消导出' }))
+    await act(async () => finish([{ channel: 'left', blob: new Blob(['late']), fileName: 'late.wav', durationMs: 1 }]))
+    expect(screen.queryByLabelText('左右声道分离结果')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '分离并导出左右声道' }))
+    expect(await screen.findByRole('link', { name: '下载右声道' })).toBeVisible()
+  })
 
   it('zooms, seeks with the keyboard, marks boundaries and preserves a custom name', async () => {
     const user = userEvent.setup()
@@ -160,6 +213,7 @@ describe('AudioSplitPage', () => {
   it('loads audio, selects a range and exports the segment', async () => {
     const user = userEvent.setup()
     const engine: AudioSplitEngine = {
+      separateChannels: vi.fn(),
       load: vi.fn().mockResolvedValue(undefined),
       probe: vi.fn().mockResolvedValue(10),
       split: vi.fn().mockResolvedValue({
@@ -189,6 +243,7 @@ describe('AudioSplitPage', () => {
   it('loads a video and exports the selected audio track as MP3', async () => {
     const user = userEvent.setup()
     const engine: AudioSplitEngine = {
+      separateChannels: vi.fn(),
       load: vi.fn().mockResolvedValue(undefined),
       probe: vi.fn().mockResolvedValue(10),
       split: vi.fn().mockResolvedValue({

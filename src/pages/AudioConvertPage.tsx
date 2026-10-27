@@ -7,6 +7,7 @@ import {
   Download,
   FileAudio,
   FilePenLine,
+  FolderOpen,
   Gauge,
   Info,
   LoaderCircle,
@@ -23,7 +24,8 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { ToolHeader } from '../components/SiteHeader'
-import { uniqueFileNames } from '../features/files/names'
+import { buildAudioExportEntries, collectAudioDrop, selectAudioImports, type AudioImportEntry } from '../features/audio-conversion/batch'
+import { inspectLosslessFile, LOSSLESS_ACCEPT, LOSSLESS_INPUT_NOTICE, supportsLosslessInput } from '../features/audio-conversion/lossless'
 import {
   AUDIO_ACCEPT,
   OUTPUT_FORMATS,
@@ -33,10 +35,11 @@ import {
   formatAudioDuration,
   inspectAudioFile,
   qualityLabel,
-  validateAudioBatch,
 } from '../features/audio-conversion/audio'
 import {
   DEFAULT_AUDIO_OPTIONS,
+  AUDIO_FILE_SIZE_LIMIT_LABEL,
+  AUDIO_BATCH_SIZE_LIMIT_LABEL,
   EMPTY_AUDIO_METADATA,
   MAX_AUDIO_FILES,
   type AudioConversionEngine,
@@ -69,6 +72,13 @@ function formatBytes(bytes: number) {
 
 function createId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
+}
+
+function compressionSummary(originalBytes: number, outputBytes: number) {
+  const saved = originalBytes - outputBytes
+  if (!saved) return '体积未变化'
+  const percent = (Math.abs(saved) / originalBytes * 100).toFixed(1)
+  return `${saved > 0 ? '节省' : '体积增加'} ${formatBytes(Math.abs(saved))}（${percent}%）`
 }
 
 function statusText(item: AudioQueueItem) {
@@ -113,8 +123,17 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
   const [converting, setConverting] = useState(false)
   const [engineLoading, setEngineLoading] = useState(false)
   const [packaging, setPackaging] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importSummary, setImportSummary] = useState('')
+  const [batchProgress, setBatchProgress] = useState({ total: 0, processed: 0, name: '' })
   const [notice, setNotice] = useState('请选择需要转换的音频文件。')
+  const losslessMode = options.mode === 'lossless'
+  const canProcess = (item: AudioQueueItem) => item.inputFormat
+    && (!losslessMode || supportsLosslessInput(item.inputFormat))
+    && ['queued', 'cancelled'].includes(item.status)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
+  const importControllerRef = useRef<AbortController | null>(null)
   const engineRef = useRef<AudioConversionEngine | null>(null)
   const itemsRef = useRef(items)
   const operationRef = useRef(0)
@@ -129,6 +148,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
 
   useEffect(() => {
     mountedRef.current = true
+    folderInputRef.current?.setAttribute('webkitdirectory', '')
     const preparations = preparationRef.current
     return () => {
       mountedRef.current = false
@@ -136,6 +156,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
       engineRef.current?.dispose()
       engineRef.current = null
       archiveControllerRef.current?.abort()
+      importControllerRef.current?.abort()
       preparations.forEach((controller) => controller.abort())
       preparations.clear()
       itemsRef.current.forEach((item) => {
@@ -147,6 +168,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
   }, [])
 
   const updateOptions = (next: Partial<AudioConversionOptions>) => {
+    if (busyRef.current) return
     setOptions((current) => ({ ...current, ...next }))
     setItems((current) => current.map((item) => {
       if (item.resultUrl) URL.revokeObjectURL(item.resultUrl)
@@ -158,52 +180,78 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
   }
 
   const updateProcessingMode = (mode: AudioConversionOptions['mode']) => {
+    if (busyRef.current || mode === options.mode) return
     setOptions((current) => ({ ...current, mode, preserveMetadata: true }))
-    setItems((current) => current.map((item) => {
+    itemsRef.current = itemsRef.current.map((item) => {
       if (item.resultUrl) URL.revokeObjectURL(item.resultUrl)
       return {
         ...item,
-        status: item.inputFormat ? 'queued' : item.status,
+        status: item.inputFormat ? 'queued' as const : item.status,
         progress: 0,
         error: item.inputFormat ? null : item.error,
         result: null,
         resultUrl: null,
         metadataExpanded: mode === 'metadata-only' ? true : item.metadataExpanded,
       }
-    }))
+    })
+    setItems(itemsRef.current)
     setNotice(mode === 'metadata-only'
       ? '已切换为仅修改信息：保持原格式和音质，只写入歌曲标签与兼容封面。'
-      : '已切换为格式转换，可重新设置格式与输出质量。')
+      : mode === 'lossless'
+        ? '已切换为无损压缩：输出 FLAC，保留原采样率、位深和声道，压缩后校验采样数据。'
+        : '已切换为格式转换，可重新设置格式与输出质量。')
   }
 
-  const prepareItem = async (item: AudioQueueItem) => {
-    const controller = new AbortController()
-    preparationRef.current.set(item.id, controller)
-    try {
-      const format = await inspectAudioFile(item.file)
-      if (controller.signal.aborted) return
-      setItems((current) => current.map((entry) => entry.id === item.id
-        ? { ...entry, inputFormat: format }
-        : entry))
-      const duration = await readAudioDuration(item.sourceUrl, controller.signal)
-      if (!controller.signal.aborted) setItems((current) => current.map((entry) => entry.id === item.id
-        ? { ...entry, duration }
-        : entry))
-    } catch (error) {
-      if (controller.signal.aborted) return
-      setItems((current) => current.map((entry) => entry.id === item.id
-        ? { ...entry, status: 'error', error: describeAudioError(error) }
-        : entry))
-    } finally { preparationRef.current.delete(item.id) }
+  const prepareItems = async (additions: AudioQueueItem[]) => {
+    const prepared = await Promise.all(additions.map(async item => {
+      const controller = new AbortController()
+      preparationRef.current.set(item.id, controller)
+      try {
+        const format = await inspectAudioFile(item.file)
+        if (controller.signal.aborted) { preparationRef.current.delete(item.id); return null }
+        setItems(current => current.map(entry => entry.id === item.id ? { ...entry, inputFormat: format } : entry))
+        return { item, format, controller }
+      } catch (error) {
+        if (!controller.signal.aborted) setItems(current => current.map(entry => entry.id === item.id
+          ? { ...entry, status: 'error', error: describeAudioError(error) } : entry))
+        preparationRef.current.delete(item.id)
+        return null
+      }
+    }))
+    let next = 0
+    const readDurations = async () => {
+      while (next < prepared.length) {
+        const entry = prepared[next++]
+        if (!entry) continue
+        const { item, format, controller } = entry
+        try {
+          if (controller.signal.aborted) continue
+          let duration: number | null = null
+          if (supportsLosslessInput(format)) {
+            const info = await inspectLosslessFile(item.file, format).catch(() => null)
+            if (info?.sampleFrames) duration = info.sampleFrames / info.sampleRate
+          }
+          if (duration === null && !controller.signal.aborted) duration = await readAudioDuration(item.sourceUrl, controller.signal)
+          if (!controller.signal.aborted) setItems(current => current.map(row => row.id === item.id ? { ...row, duration } : row))
+        } finally { preparationRef.current.delete(item.id) }
+      }
+    }
+    await Promise.all([readDurations(), readDurations()])
   }
 
-  const addFiles = (files: File[]) => {
-    if (!files.length || busyRef.current) return
+  const addFiles = (files: AudioImportEntry[], folder = false, extraNote = '') => {
+    if (busyRef.current) return
     try {
-      const { accepted, ignored } = validateAudioBatch(itemsRef.current.map((item) => item.file), files)
-      const additions = accepted.map<AudioQueueItem>((file) => ({
+      const { selected, unsupported, limited, invalid } = selectAudioImports(files, itemsRef.current.map(item => item.file), folder)
+      const summary = `已添加 ${selected.length} 个音频。` + (unsupported ? `已忽略 ${unsupported} 个非 WAV/AIFF/FLAC 文件。` : '')
+        + (limited ? `${limited} 个文件因数量或大小限制未添加。` : '') + (invalid ? `${invalid} 个路径无效的文件未添加。` : '') + extraNote
+      setImportSummary(summary)
+      if (!selected.length) { setNotice(`没有可添加的文件。${summary}`); return }
+      if (folder) updateProcessingMode('lossless')
+      const additions = selected.map<AudioQueueItem>(({ file, relativePath }) => ({
         id: createId(),
         file,
+        relativePath,
         inputFormat: null,
         sourceUrl: URL.createObjectURL(file),
         duration: null,
@@ -213,18 +261,40 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
         result: null,
         resultUrl: null,
         metadata: { ...EMPTY_AUDIO_METADATA },
-        metadataExpanded: options.mode === 'metadata-only',
+        metadataExpanded: !folder && options.mode === 'metadata-only',
         coverFile: null,
         coverUrl: null,
       }))
       itemsRef.current = [...itemsRef.current, ...additions]
       setItems(itemsRef.current)
-      setNotice(ignored
-        ? `已添加 ${accepted.length} 个文件，另有 ${ignored} 个文件因数量或大小限制被忽略。`
-        : `已添加 ${accepted.length} 个文件，正在读取音频信息。`)
-      additions.forEach((item) => void prepareItem(item))
+      setNotice(folder ? '已进入无损压缩模式，文件夹及子目录中的音频将按顺序处理。' : '正在读取音频信息，可一次添加多个文件。')
+      void prepareItems(additions)
     } catch (error) {
       setNotice(describeAudioError(error))
+    }
+  }
+
+  const importDrop = async (transfer: DataTransfer) => {
+    if (busyRef.current) return
+    const controller = new AbortController()
+    importControllerRef.current = controller
+    busyRef.current = true
+    setImporting(true)
+    setNotice('正在读取拖入的文件与文件夹…')
+    try {
+      const selection = await collectAudioDrop(transfer, controller.signal)
+      if (controller.signal.aborted || !mountedRef.current) return
+      busyRef.current = false
+      addFiles(selection.files, selection.folder,
+        (selection.unreadable ? `${selection.unreadable} 项无法读取。` : '') + (selection.truncated ? '目录过大，仅扫描前 10,000 项或 64 层目录。' : ''))
+    } catch (error) {
+      if (mountedRef.current && !controller.signal.aborted) setNotice(describeAudioError(error))
+    } finally {
+      if (importControllerRef.current === controller) {
+        importControllerRef.current = null
+        busyRef.current = false
+        if (mountedRef.current) setImporting(false)
+      }
     }
   }
 
@@ -252,6 +322,8 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
     setItems([])
     itemsRef.current = []
     if (fileInputRef.current) fileInputRef.current.value = ''
+    if (folderInputRef.current) folderInputRef.current.value = ''
+    setImportSummary('')
     setNotice('列表已清空，音频文件不会保留。')
   }
 
@@ -263,6 +335,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
   }
 
   const updateItemMetadata = (id: string, field: keyof AudioMetadata, value: string) => {
+    if (busyRef.current) return
     setItems((current) => current.map((item) => item.id === id
       ? { ...resetItemResult(item), metadata: { ...item.metadata, [field]: value } }
       : item))
@@ -270,6 +343,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
   }
 
   const updateItemCover = (id: string, file: File) => {
+    if (busyRef.current) return
     if (file.size > 10 * 1024 * 1024) {
       setNotice('封面图片不能超过 10 MB。')
       return
@@ -287,6 +361,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
   }
 
   const removeItemCover = (id: string) => {
+    if (busyRef.current) return
     setItems((current) => current.map((item) => {
       if (item.id !== id) return item
       if (item.coverUrl) URL.revokeObjectURL(item.coverUrl)
@@ -320,10 +395,9 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
     }
   }
 
-  const runConversion = async () => {
-    const ready = itemsRef.current.filter((item) =>
-      item.inputFormat && ['queued', 'cancelled', 'done'].includes(item.status),
-    )
+  const runConversion = async (retryFailed = false) => {
+    const ready = itemsRef.current.filter(item => retryFailed
+      ? item.inputFormat && item.status === 'error' && (!losslessMode || supportsLosslessInput(item.inputFormat)) : canProcess(item))
     if (!ready.length || busyRef.current) {
       setNotice('请先添加可读取的音频文件。')
       return
@@ -331,25 +405,28 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
     setConverting(true)
     busyRef.current = true
     const operation = ++operationRef.current
+    setBatchProgress({ total: ready.length, processed: 0, name: '' })
     let completed = 0
     try {
-      const engine = await getEngine(operation)
+      await getEngine(operation)
       if (operation !== operationRef.current) return
       setNotice(options.mode === 'metadata-only'
         ? `正在按顺序写入 ${ready.length} 个文件的歌曲信息。`
-        : `正在按顺序转换 ${ready.length} 个文件。`)
-      for (const item of ready) {
+        : losslessMode ? `正在无损压缩并校验 ${ready.length} 个文件。` : `正在按顺序转换 ${ready.length} 个文件。`)
+      for (const [index, item] of ready.entries()) {
         if (operation !== operationRef.current) return
         if (item.resultUrl) URL.revokeObjectURL(item.resultUrl)
+        setBatchProgress({ total: ready.length, processed: index, name: item.relativePath || item.file.name })
         setItems((current) => current.map((entry) => entry.id === item.id
           ? { ...entry, status: 'converting', progress: 0, error: null, result: null, resultUrl: null }
           : entry))
         try {
+          const engine = await getEngine(operation)
           const result = await engine.convert(
             {
               file: item.file,
               inputFormat: item.inputFormat!,
-              options,
+              options: losslessMode ? { ...options, format: 'flac', sampleRate: 'original', channels: 'original' } : options,
               metadata: item.metadata,
               coverFile: item.coverFile,
             },
@@ -373,12 +450,13 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
             ? { ...entry, status: 'error', error: describeAudioError(error), progress: 0 }
             : entry))
         }
+        if (operation === operationRef.current) setBatchProgress({ total: ready.length, processed: index + 1, name: '' })
       }
       if (operation === operationRef.current) {
         setNotice(completed === ready.length
           ? options.mode === 'metadata-only'
             ? `信息处理完成，共生成 ${completed} 个保持原音质的音频文件，填写的文本标签已回读校验。`
-            : `转换完成，共生成 ${completed} 个音频文件。`
+            : losslessMode ? `无损压缩完成，${completed} 个文件的音频参数和采样数据均已校验。` : `转换完成，共生成 ${completed} 个音频文件。`
           : `已完成 ${completed} 个文件，失败项可查看具体原因。`)
       }
     } catch (error) {
@@ -398,10 +476,11 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
     setItems((current) => current.map((item) => item.status === 'converting'
       ? { ...item, status: 'cancelled', progress: 0 }
       : item))
-    setNotice('已停止当前转换，等待项目可重新开始。')
+    setNotice(losslessMode ? '已停止无损压缩，等待项目可重新开始。' : '已停止当前转换，等待项目可重新开始。')
   }
 
   const retryItem = (id: string) => {
+    if (busyRef.current) return
     setItems((current) => current.map((item) => {
       if (item.id !== id || !item.inputFormat) return item
       if (item.resultUrl) URL.revokeObjectURL(item.resultUrl)
@@ -412,7 +491,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
 
   const downloadResults = async () => {
     const finished = items.filter((item) => item.result)
-    if (finished.length < 2 || busyRef.current) return
+    if (!finished.length || busyRef.current) return
     busyRef.current = true
     setPackaging(true)
     const controller = new AbortController()
@@ -420,13 +499,14 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
     setNotice('正在生成 ZIP 压缩包。')
     try {
       const { createZip } = await import('../features/files/zip')
-      const names = uniqueFileNames(finished.map((item) => item.result!.fileName))
-      const archive = await createZip(finished.map((item, index) => ({ path: names[index], blob: item.result!.blob })), controller.signal)
+      const archive = await createZip(buildAudioExportEntries(finished), controller.signal, (index, total) => {
+        if (mountedRef.current) setNotice(`正在打包 ${index + 1}/${total}，保留子目录与全部同名结果。`)
+      })
       if (!mountedRef.current || controller.signal.aborted) return
       const url = URL.createObjectURL(archive)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = 'YL-AudioLab-converted.zip'
+      anchor.download = losslessMode ? 'YL-AudioLab-lossless.zip' : 'YL-AudioLab-converted.zip'
       anchor.click()
       window.setTimeout(() => URL.revokeObjectURL(url), 30_000)
       setNotice(`已打包 ${finished.length} 个转换结果。`)
@@ -442,6 +522,12 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
   }
 
   const completedCount = items.filter((item) => item.status === 'done').length
+  const folderBatch = items.some(item => item.relativePath?.includes('/'))
+  const failedCount = items.filter(item => item.status === 'error').length
+  const retryableCount = items.filter(item => item.status === 'error' && item.inputFormat && (!losslessMode || supportsLosslessInput(item.inputFormat))).length
+  const completedSourceBytes = items.reduce((sum, item) => sum + (item.result ? item.file.size : 0), 0)
+  const completedOutputBytes = items.reduce((sum, item) => sum + (item.result?.blob.size ?? 0), 0)
+  const activeProgress = items.find(item => item.status === 'converting')?.progress ?? 0
   const singleFinishedItem = completedCount === 1
     ? items.find((item) => item.status === 'done' && item.result && item.resultUrl)
     : undefined
@@ -452,7 +538,9 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
     const estimate = estimateAudioOutputSize(item.duration, options)
     return estimate === null ? total : total + estimate
   }, 0)
-  const busy = converting || engineLoading || packaging
+  const busy = converting || engineLoading || packaging || importing
+  const readingFormats = items.some(item => !item.inputFormat && item.status === 'queued')
+  const readyCount = items.filter(canProcess).length
 
   return (
     <div className={styles.page}>
@@ -463,7 +551,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
             <span className={`${styles.introIcon} ${audioStyles.audioIcon}`}><AudioLines aria-hidden="true" /></span>
             <div>
               <h1>音频格式转换</h1>
-              <p>单首或批量转换常用音乐与音频格式。</p>
+              <p>单首或批量转换格式、无损压缩与编辑歌曲信息。</p>
             </div>
           </div>
           <span className={styles.localBadge}><ShieldCheck aria-hidden="true" /> 全程本地处理</span>
@@ -472,7 +560,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
         <aside className={styles.settings} aria-label="音频转换设置">
           <header>
             <div><Gauge aria-hidden="true" /><h2>处理设置</h2></div>
-            <span>{metadataOnly ? '原格式' : selectedFormat.label}</span>
+            <span>{metadataOnly ? '原格式' : losslessMode ? 'FLAC 无损' : selectedFormat.label}</span>
           </header>
 
           <fieldset className={audioStyles.modeFieldset}>
@@ -480,7 +568,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
             <div className={audioStyles.modeGrid}>
               <button
                 type="button"
-                aria-pressed={!metadataOnly}
+                aria-pressed={options.mode === 'transcode'}
                 disabled={busy}
                 onClick={() => updateProcessingMode('transcode')}
               >
@@ -496,10 +584,21 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
                 <strong>仅修改信息</strong>
                 <small>保持原格式和原音质</small>
               </button>
+              <button
+                type="button"
+                className={audioStyles.losslessMode}
+                aria-label="无损压缩"
+                aria-pressed={losslessMode}
+                disabled={busy}
+                onClick={() => updateProcessingMode('lossless')}
+              >
+                <strong>无损压缩</strong>
+                <small>FLAC · 保留精度并校验</small>
+              </button>
             </div>
           </fieldset>
 
-          {!metadataOnly ? <><fieldset className={styles.formatFieldset}>
+          {options.mode === 'transcode' ? <><fieldset className={styles.formatFieldset} disabled={busy}>
             <legend>目标格式</legend>
             <div className={styles.formatGrid}>
               {OUTPUT_FORMATS.map((format) => (
@@ -592,7 +691,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
               <p className={audioStyles.sizeEstimate}>
                 {options.format === 'wav'
                   ? `WAV 固定输出 PCM 16-bit${items.length && estimatedBytes ? `，当前队列预计约 ${formatBytes(estimatedBytes)}` : ''}。`
-                  : 'FLAC 固定无损输出，文件大小由原始音频内容决定。'}
+                  : 'FLAC 文件大小由内容决定；需要保留原始参数并校验采样数据，请选择“无损压缩”。'}
               </p>
             )}
           </div>
@@ -621,7 +720,16 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
               </select>
             </label>
           </div>
-          </> : (
+          </> : losslessMode ? (
+            <div className={audioStyles.metadataOnlyNote}>
+              <ShieldCheck aria-hidden="true" />
+              <div>
+                <strong>保留原采样率、位深与声道</strong>
+                <p>支持 16/24 位整数 PCM WAV、AIFF 和 FLAC，统一压缩为 FLAC。完成后校验全部音频采样，校验通过才提供下载。</p>
+                <p>已有 FLAC 通常压缩空间有限；若输出更大，会明确提示。浮点音频和其他位深暂不支持。</p>
+              </div>
+            </div>
+          ) : (
             <div className={audioStyles.metadataOnlyNote}>
               <FilePenLine aria-hidden="true" />
               <div>
@@ -631,7 +739,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
             </div>
           )}
 
-          {(metadataOnly ? items.some(item => item.inputFormat === 'wav') : options.format === 'wav') ? (
+          {!losslessMode && (metadataOnly ? items.some(item => item.inputFormat === 'wav') : options.format === 'wav') ? (
             <div className={audioStyles.settingGroup}>
               <label className={audioStyles.wavEncoding}>
                 <span>WAV 标签编码</span>
@@ -652,6 +760,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
             <label className={audioStyles.metadataToggle}>
               <input
                 type="checkbox"
+                disabled={busy}
                 checked={options.preserveMetadata}
                 onChange={(event) => updateOptions({ preserveMetadata: event.target.checked })}
               />
@@ -661,28 +770,31 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
 
           <div className={audioStyles.engineNote}>
             <Info aria-hidden="true" />
-            <p>首次处理会从本站加载约 31 MB 的本地转码核心，之后按队列逐个处理。</p>
+            <p>单个文件最多 {AUDIO_FILE_SIZE_LIMIT_LABEL}，每批总大小最多 {AUDIO_BATCH_SIZE_LIMIT_LABEL}。首次处理会从本站加载约 31 MB 的本地转码核心，之后按队列逐个处理。</p>
           </div>
 
           <div className={audioStyles.buttonStack}>
             <button
               className="button button-primary"
               type="button"
-              disabled={busy || !items.some((item) => item.inputFormat && item.status !== 'error')}
+              disabled={busy || readingFormats || !readyCount}
               onClick={() => void runConversion()}
             >
               {busy ? <LoaderCircle className={styles.spinner} aria-hidden="true" /> : <Play aria-hidden="true" />}
               {engineLoading
                 ? '正在加载引擎'
                 : converting
-                  ? metadataOnly ? '正在写入信息' : '正在转换'
-                  : `${metadataOnly ? '写入歌曲信息' : '开始转换'}${items.length ? `（${items.length}）` : ''}`}
+                  ? metadataOnly ? '正在写入信息' : losslessMode ? '正在压缩与校验' : '正在转换'
+                  : `${metadataOnly ? '写入歌曲信息' : losslessMode ? '开始无损压缩' : '开始转换'}${items.length ? `（${readyCount}）` : ''}`}
             </button>
             {converting ? (
               <button className={`button ${audioStyles.cancelButton}`} type="button" onClick={cancelConversion}>
-                <Square aria-hidden="true" /> 停止转换
+                <Square aria-hidden="true" /> {losslessMode ? '停止压缩' : '停止转换'}
               </button>
             ) : null}
+            {retryableCount ? <button className="button" type="button" disabled={busy || readingFormats} onClick={() => void runConversion(true)}>
+              <RefreshCcw aria-hidden="true" /> 重试失败项（{retryableCount}）
+            </button> : null}
           </div>
         </aside>
 
@@ -701,6 +813,13 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
           </header>
 
           <p className={audioStyles.noticeBar} aria-live="polite">{notice}</p>
+          {importSummary ? <p className={audioStyles.importSummary} aria-label="导入摘要">{importSummary}</p> : null}
+          {importing ? <button className={`button ${audioStyles.importStop}`} type="button" onClick={() => { importControllerRef.current?.abort(); setNotice('已停止读取文件夹。') }}>停止读取</button> : null}
+          {converting ? <div className={audioStyles.batchProgress}>
+            <span>已处理 {batchProgress.processed}/{batchProgress.total}{batchProgress.name ? ` · ${batchProgress.name}` : ''}</span>
+            <progress aria-label="批量处理进度" max={Math.max(1, batchProgress.total * 100)} value={batchProgress.processed * 100 + activeProgress} />
+          </div> : null}
+          {folderBatch ? <p className={audioStyles.importSummary}><FolderOpen aria-hidden="true" /> 已保留文件夹路径；下载 ZIP 时保留子目录，同名结果自动编号。</p> : null}
 
           <div
             className={`${styles.dropZone} ${dragging ? styles.dropZoneActive : ''} ${items.length ? styles.compactDropZone : ''}`}
@@ -710,34 +829,42 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
             onDrop={(event) => {
               event.preventDefault()
               setDragging(false)
-              addFiles(Array.from(event.dataTransfer.files))
+              void importDrop(event.dataTransfer)
             }}
           >
             <input
               ref={fileInputRef}
               type="file"
-              accept={AUDIO_ACCEPT}
+              accept={losslessMode ? LOSSLESS_ACCEPT : AUDIO_ACCEPT}
+              disabled={busy}
               multiple
               aria-label="选择音频文件"
-              onChange={(event) => addFiles(Array.from(event.target.files ?? []))}
+              onChange={(event) => { addFiles(Array.from(event.target.files ?? [], file => ({ file }))); event.target.value = '' }}
             />
+            <input ref={folderInputRef} type="file" multiple disabled={busy} aria-label="选择音频无损压缩文件夹"
+              onChange={event => { addFiles(Array.from(event.target.files ?? [], file => ({ file, relativePath: file.webkitRelativePath || file.name })), true); event.target.value = '' }} />
             <span className={styles.uploadIcon}><UploadCloud aria-hidden="true" /></span>
             <div>
-              <h3>{dragging ? '松开即可添加音频' : '拖拽音频到这里，或点击选择'}</h3>
-              <p>输入支持 MP3、WAV、FLAC、M4A、AAC、OGG、Opus，以及 WMA、AIFF</p>
+              <h3>{dragging ? '松开即可添加音频或文件夹' : '拖入多个音频或文件夹，或点击选择'}</h3>
+              <p>{losslessMode ? '支持 16/24 位整数 PCM WAV、AIFF 和 FLAC；压缩效果以实际结果为准' : '输入支持 MP3、WAV、FLAC、M4A、AAC、OGG、Opus，以及 WMA、AIFF'}</p>
             </div>
-            <button type="button" className="button" onClick={() => fileInputRef.current?.click()} disabled={busy}>
-              <Music2 aria-hidden="true" /> 选择音频
-            </button>
+            <div className={audioStyles.importActions}>
+              <button type="button" className="button" onClick={() => fileInputRef.current?.click()} disabled={busy}>
+                <Music2 aria-hidden="true" /> 选择音频
+              </button>
+              <button type="button" className="button" onClick={() => folderInputRef.current?.click()} disabled={busy}>
+                <FolderOpen aria-hidden="true" /> 文件夹无损压缩
+              </button>
+            </div>
           </div>
 
           {items.length ? (
-            <div className={styles.fileList} aria-label="待转换音频">
+            <div className={`${styles.fileList} ${items.length > 20 ? audioStyles.batchList : ''}`} aria-label="待转换音频" tabIndex={items.length > 20 ? 0 : undefined}>
               {items.map((item) => (
                 <article className={`${styles.fileItem} ${item.status === 'error' ? styles.fileError : ''}`} key={item.id}>
                   <div className={`${styles.thumbnail} ${audioStyles.artwork}`}><FileAudio aria-hidden="true" /></div>
                   <div className={styles.fileInfo}>
-                    <strong title={item.file.name}>{item.file.name}</strong>
+                    <strong title={item.relativePath || item.file.name}>{item.relativePath || item.file.name}</strong>
                     <p>
                       <span>{item.inputFormat?.toUpperCase() ?? '读取中'}</span>
                       <span>{formatAudioDuration(item.duration)}</span>
@@ -749,12 +876,15 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
                       </div>
                     ) : null}
                     {item.error ? <small className={styles.errorText}>{item.error}</small> : null}
+                    {losslessMode && item.inputFormat && !supportsLosslessInput(item.inputFormat)
+                      ? <small className={audioStyles.warningText}>{LOSSLESS_INPUT_NOTICE}</small> : null}
                     {item.result?.warnings.map((warning) => <small className={audioStyles.warningText} key={warning}>{warning}</small>)}
                   </div>
                   <span className={`${styles.status} ${styles[item.status]}`}>
                     {item.status === 'done' ? <Check aria-hidden="true" /> : null}
                     {item.status === 'converting' ? <LoaderCircle className={styles.spinner} aria-hidden="true" /> : null}
-                    {statusText(item)}
+                    {losslessMode && item.inputFormat && !supportsLosslessInput(item.inputFormat)
+                      ? '不适用' : statusText(item)}
                   </span>
                   <div className={styles.resultInfo}>
                     {item.result && item.resultUrl ? (
@@ -768,6 +898,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
                         <button
                           className={audioStyles.retryButton}
                           type="button"
+                          disabled={busy}
                           aria-expanded={item.metadataExpanded}
                           aria-label={`编辑 ${item.file.name} 的歌曲信息`}
                           onClick={() => toggleMetadataEditor(item.id)}
@@ -780,8 +911,8 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
                             <Download aria-hidden="true" /> 下载
                           </a>
                         ) : null}
-                        <button className={audioStyles.retryButton} type="button" onClick={() => retryItem(item.id)}>
-                          <RefreshCcw aria-hidden="true" /> {metadataOnly ? '重新处理' : '重新转换'}
+                        <button className={audioStyles.retryButton} type="button" disabled={busy} onClick={() => retryItem(item.id)}>
+                          <RefreshCcw aria-hidden="true" /> {metadataOnly ? '重新处理' : losslessMode ? '重新压缩' : '重新转换'}
                         </button>
                       </div>
                     ) : null}
@@ -789,13 +920,19 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
                   <button
                     className={styles.removeButton}
                     type="button"
-                    aria-label={`移除 ${item.file.name}`}
+                    aria-label={`移除 ${item.relativePath || item.file.name}`}
                     disabled={busy}
                     onClick={() => removeItem(item.id)}
                   ><X aria-hidden="true" /></button>
+                  {item.result?.lossless ? (
+                    <div className={audioStyles.losslessDetails} aria-label={`${item.file.name} 的无损压缩结果`}>
+                      <strong>{formatBytes(item.file.size)} → {formatBytes(item.result.blob.size)} · {compressionSummary(item.file.size, item.result.blob.size)}</strong>
+                      <span><ShieldCheck aria-hidden="true" /> 采样校验通过 · {item.result.lossless.sampleRate / 1000} kHz · {item.result.lossless.bitDepth} 位 · {item.result.lossless.channels} 声道</span>
+                    </div>
+                  ) : null}
                   <div className={audioStyles.audioPlayers}>
-                    <label>原音频<audio controls preload="metadata" src={item.sourceUrl} /></label>
-                    {item.resultUrl ? <label>转换结果<audio controls preload="metadata" src={item.resultUrl} /></label> : null}
+                    <label>原音频<audio controls preload={items.length > 20 ? 'none' : 'metadata'} src={item.sourceUrl} /></label>
+                    {item.resultUrl ? <label>{losslessMode ? '压缩结果' : '转换结果'}<audio controls preload={items.length > 20 ? 'none' : 'metadata'} src={item.resultUrl} /></label> : null}
                   </div>
                   {item.metadataExpanded ? (
                     <AudioMetadataEditor
@@ -814,9 +951,12 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
           ) : null}
 
           {completedCount ? (
+            <p className={audioStyles.batchTotals} aria-label="批量结果汇总">已完成 {completedCount}/{items.length} 个文件{failedCount ? `，${failedCount} 个失败` : ''} · {formatBytes(completedSourceBytes)} → {formatBytes(completedOutputBytes)} · {compressionSummary(completedSourceBytes, completedOutputBytes)}</p>
+          ) : null}
+          {completedCount ? (
             <div className={styles.resultBar}>
-              <div><Check aria-hidden="true" /><span><strong>{completedCount} 个音频{metadataOnly ? '信息修改' : '转换'}完成</strong><small>{completedCount === 1 ? '可直接试听并下载文件' : '可单独试听、下载或打包为 ZIP'}</small></span></div>
-              {singleFinishedItem?.result && singleFinishedItem.resultUrl ? (
+              <div><Check aria-hidden="true" /><span><strong>{completedCount} 个音频{metadataOnly ? '信息修改' : losslessMode ? '无损压缩' : '转换'}完成</strong><small>{completedCount === 1 ? '可直接试听并下载文件' : '可单独试听、下载或打包为 ZIP'}</small></span></div>
+              {!folderBatch && singleFinishedItem?.result && singleFinishedItem.resultUrl ? (
                 <a
                   className="button button-primary"
                   href={singleFinishedItem.resultUrl}
@@ -828,7 +968,7 @@ export function AudioConvertPage({ engineFactory = defaultEngineFactory }: Audio
               ) : (
                 <>
                   <button className="button button-primary" type="button" disabled={busy} onClick={() => void downloadResults()}>
-                    <Archive aria-hidden="true" /> {packaging ? '正在打包…' : '下载全部'}
+                    <Archive aria-hidden="true" /> {packaging ? '正在打包…' : folderBatch ? '下载文件夹 ZIP' : '下载全部'}
                   </button>
                   {packaging ? <button className="button" type="button" onClick={() => archiveControllerRef.current?.abort()}>停止打包</button> : null}
                 </>

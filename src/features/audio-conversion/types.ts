@@ -13,7 +13,7 @@ export type AudioOutputFormat = Exclude<AudioInputFormat, 'wma' | 'aiff'>
 
 export type AudioQualityPreset = 'compact' | 'standard' | 'high'
 export type AudioQualityMode = 'preset' | 'custom'
-export type AudioProcessingMode = 'transcode' | 'metadata-only'
+export type AudioProcessingMode = 'transcode' | 'metadata-only' | 'lossless'
 export type WavMetadataEncoding = 'gbk' | 'utf-8'
 export type AudioSampleRate = 'original' | 44100 | 48000
 export type AudioChannels = 'original' | 'mono' | 'stereo'
@@ -54,6 +54,14 @@ export interface AudioConversionResult {
   format: AudioInputFormat
   durationMs: number
   warnings: string[]
+  lossless?: LosslessAudioInfo & { verified: true; keptOriginal?: boolean }
+}
+
+export interface LosslessAudioInfo {
+  sampleRate: number
+  bitDepth: number
+  channels: number
+  sampleFrames: number
 }
 
 export type AudioQueueStatus =
@@ -67,6 +75,7 @@ export interface AudioQueueItem {
   id: string
   file: File
   inputFormat: AudioInputFormat | null
+  relativePath?: string
   sourceUrl: string
   duration: number | null
   status: AudioQueueStatus
@@ -124,6 +133,8 @@ export const EMPTY_AUDIO_METADATA: AudioMetadata = {
   comment: '',
 }
 
-export const MAX_AUDIO_FILES = 20
-export const MAX_AUDIO_FILE_SIZE = 100 * 1024 * 1024
-export const MAX_AUDIO_BATCH_SIZE = 500 * 1024 * 1024
+export const MAX_AUDIO_FILES = 100
+export const MAX_AUDIO_FILE_SIZE = 500 * 1024 * 1024
+export const MAX_AUDIO_BATCH_SIZE = 2 * 1024 ** 3
+export const AUDIO_FILE_SIZE_LIMIT_LABEL = `${MAX_AUDIO_FILE_SIZE / 1024 ** 2} MB`
+export const AUDIO_BATCH_SIZE_LIMIT_LABEL = `${MAX_AUDIO_BATCH_SIZE / 1024 ** 3} GB`

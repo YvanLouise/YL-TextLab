@@ -1,6 +1,7 @@
 import { inspectAudioFile } from '../audio-conversion/audio'
-import { AudioConversionError, MAX_AUDIO_FILE_SIZE, type AudioInputFormat } from '../audio-conversion/types'
+import { AudioConversionError, AUDIO_FILE_SIZE_LIMIT_LABEL, MAX_AUDIO_FILE_SIZE, type AudioInputFormat } from '../audio-conversion/types'
 import type {
+  AudioChannel,
   AudioSplitInputFormat,
   AudioSplitOutputFormat,
   AudioSplitSource,
@@ -62,7 +63,7 @@ export function isLikelyVideoFile(file: File) {
 
 export async function inspectSplitSource(file: File): Promise<AudioSplitSource> {
   if (file.size > MAX_AUDIO_FILE_SIZE) {
-    throw new AudioConversionError('FILE_TOO_LARGE', '单个音频或视频文件不能超过 100 MB。')
+    throw new AudioConversionError('FILE_TOO_LARGE', `单个音频或视频文件不能超过 ${AUDIO_FILE_SIZE_LIMIT_LABEL}。`)
   }
   if (isLikelyVideoFile(file)) {
     const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
@@ -109,6 +110,24 @@ export function normalizeSplitFileName(name: string, extension: string) {
   return `${safe}.${extension}`
 }
 
+export function createChannelFileName(name: string, extension: string, channel: AudioChannel) {
+  const normalized = normalizeSplitFileName(name, extension)
+  return `${normalized.slice(0, -(extension.length + 1))}_${channel === 'left' ? 'L' : 'R'}.${extension}`
+}
+
+export function readWavChannelCount(bytes: Uint8Array) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const tag = (offset: number) => String.fromCharCode(...bytes.subarray(offset, offset + 4))
+  if (bytes.length < 12 || tag(0) !== 'RIFF' || tag(8) !== 'WAVE') return null
+  for (let offset = 12; offset + 8 <= bytes.length;) {
+    const size = view.getUint32(offset + 4, true)
+    if (offset + 8 + size > bytes.length) return null
+    if (tag(offset) === 'fmt ' && size >= 16) return view.getUint16(offset + 10, true)
+    offset += 8 + size + size % 2
+  }
+  return null
+}
+
 export function clampWaveformView(start: number, span: number, duration: number) {
   const size = Math.min(duration, Math.max(MIN_SPLIT_SECONDS, span))
   const left = Math.max(0, Math.min(duration - size, start))
@@ -147,6 +166,7 @@ export function buildSplitCommand(
   outputFormat: AudioSplitOutputFormat,
   startSeconds: number,
   endSeconds: number,
+  channel?: AudioChannel,
 ) {
   if (![startSeconds, endSeconds].every(Number.isFinite) || startSeconds < 0
     || Math.round(endSeconds * 1000) - Math.round(startSeconds * 1000) < 10) {
@@ -163,10 +183,21 @@ export function buildSplitCommand(
     '-map', '0:a:0',
     '-vn',
     // Match the decoded waveform's sample timeline, not rounded container timestamps.
-    '-af', `asetpts=N/SR/TB,atrim=start=${startSeconds.toFixed(3)}:duration=${duration.toFixed(3)},asetpts=PTS-STARTPTS`,
+    '-af', `asetpts=N/SR/TB,atrim=start=${startSeconds.toFixed(3)}:duration=${duration.toFixed(3)},asetpts=PTS-STARTPTS${channel ? `,pan=mono|c0=c${channel === 'left' ? 0 : 1}` : ''}`,
     '-map_metadata', '0',
     ...codec,
     outputPath,
+  ]
+}
+
+export function buildChannelSplitCommand(
+  inputPath: string, leftPath: string, rightPath: string,
+  inputFormat: AudioSplitInputFormat, outputFormat: AudioSplitOutputFormat,
+  startSeconds: number, endSeconds: number,
+) {
+  return [
+    ...buildSplitCommand(inputPath, leftPath, inputFormat, outputFormat, startSeconds, endSeconds, 'left'),
+    ...buildSplitCommand(inputPath, rightPath, inputFormat, outputFormat, startSeconds, endSeconds, 'right').slice(2),
   ]
 }
 

@@ -182,9 +182,9 @@ export function HomePage() {
                   <h3>音频格式转换</h3>
                   <span className={styles.onlineBadge}>已上线</span>
                 </div>
-                <p>在浏览器本地转换常用音乐格式，支持质量参数、标签保留与批量下载。</p>
+                <p>本地转换音乐格式或无损压缩为 FLAC，支持文件夹批量压缩与歌曲信息编辑。</p>
                 <ul>
-                  {['MP3 / WAV / FLAC / M4A', 'AAC / OGG / Opus 输出', '码率、采样率与声道', '批量转换、试听与 ZIP 下载'].map((item) => (
+                  {['MP3 / WAV / FLAC / M4A', 'AAC / OGG / Opus 输出', '无损压缩与采样校验', '文件夹批量处理、试听与 ZIP 下载'].map((item) => (
                     <li key={item}><Check aria-hidden="true" /> {item}</li>
                   ))}
                 </ul>
@@ -201,9 +201,9 @@ export function HomePage() {
                   <h3>音频分割与提取</h3>
                   <span className={styles.onlineBadge}>已上线</span>
                 </div>
-                <p>截取音频片段，或从视频的指定时间区域提取音轨。</p>
+                <p>截取音频片段、提取视频音轨，或将歌曲的左右声道分别导出。</p>
                 <ul>
-                  {['音频与视频文件输入', '毫秒级开始与结束时间', '试听所选音频片段', 'MP3 / WAV 音轨提取'].map((item) => (
+                  {['音频与视频文件输入', '毫秒级开始与结束时间', '左右声道独立试听与下载', 'MP3 / WAV 音轨提取'].map((item) => (
                     <li key={item}><Check aria-hidden="true" /> {item}</li>
                   ))}
                 </ul>

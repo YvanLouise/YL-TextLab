@@ -60,6 +60,18 @@
   line-height: 1.35;
 }
 
+.modeGrid .losslessMode {
+  grid-column: 1 / -1;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  min-height: 46px;
+  gap: 12px;
+}
+
+.losslessMode small {
+  text-align: right;
+}
+
 .metadataOnlyNote {
   display: flex;
   gap: 10px;
@@ -367,8 +379,36 @@
 .warningText {
   display: block;
   margin-top: 4px;
-  color: #a86f00;
+  color: var(--warning);
   font-size: 9px;
+}
+
+.losslessDetails {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid var(--primary-border);
+  border-radius: 8px;
+  background: var(--surface-blue);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.losslessDetails strong {
+  color: var(--text-strong);
+}
+
+.losslessDetails span {
+  color: var(--text-muted);
+}
+
+.losslessDetails svg {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  vertical-align: -3px;
+  color: var(--primary);
 }
 
 .resultActions {
@@ -565,6 +605,59 @@
   font-size: 10px;
 }
 
+.importActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.importSummary {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.importSummary svg {
+  width: 14px;
+  height: 14px;
+  vertical-align: -3px;
+}
+
+.importStop {
+  margin-bottom: 12px;
+}
+
+.batchProgress {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.batchProgress progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--primary);
+}
+
+.batchList {
+  max-height: 68vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.batchTotals {
+  margin: 18px 0 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 @media (max-width: 930px) {
   .audioPlayers {
     grid-column: 2 / -1;
@@ -576,6 +669,31 @@
 }
 
 @media (max-width: 720px) {
+  .importActions {
+    grid-column: 1 / -1;
+  }
+
+  .importActions button {
+    flex: 1;
+    padding-inline: 8px;
+  }
+
+  .noticeBar,
+  .importSummary,
+  .importStop {
+    order: 4;
+    margin-bottom: 0;
+  }
+
+  .batchProgress {
+    order: 6;
+  }
+
+  .batchTotals {
+    order: 7;
+    margin: 0;
+  }
+
   .progressTrack {
     width: 100%;
   }

@@ -38,6 +38,39 @@ export function ChangelogPage() {
           <article className={styles.release}>
             <aside className={styles.releaseMeta}>
               <span className={styles.timelineDot} />
+              <strong>v1.6.5</strong>
+              <time dateTime="2026-10-27">2026-10-27</time>
+              <span className={styles.releaseBadge}>音频处理增强</span>
+            </aside>
+            <div className={styles.releaseNotes}>
+              <section>
+                <h2>音频无损压缩</h2>
+                <ul>
+                  <li><Check /> 音频转换新增无损压缩模式，将 16/24 位整数 PCM WAV、AIFF 和 FLAC 压缩为 FLAC</li>
+                  <li><Check /> 保留原采样率、位深和声道，完整采样校验通过后才提供下载</li>
+                  <li><Check /> 显示前后大小与节省比例；明确提示体积未减小和不支持的来源</li>
+                  <li><Check /> 支持多选音频和文件夹递归导入，ZIP 保留子目录，同名结果自动编号</li>
+                  <li><Check /> 批量进度与体积汇总、失败项重试、停止后继续未完成项</li>
+                  <li><Check /> 按需读取源文件，编码与源采样校验共用解码，减少内存复制和重复解码</li>
+                  <li><Check /> 未修改信息的 FLAC 如无法进一步减小则保留原内容</li>
+                  <li><Check /> 音频队列扩大至每批 100 个文件、总输入 2 GB</li>
+                  <li><Check /> 音频处理与音视频分割的单文件上限从 100 MB 提高至 500 MB</li>
+                </ul>
+              </section>
+              <section>
+                <h2>歌曲左右声道独立导出</h2>
+                <ul>
+                  <li><Check /> 音频分割工具新增左右声道分离模式，整首歌曲或所选片段均可处理</li>
+                  <li><Check /> 分别生成 _L、_R 单声道文件，支持独立试听和下载</li>
+                  <li><Check /> 默认 WAV 输出，支持 MP3 和保持原格式；自动识别并提示不适用的声道数</li>
+                  <li><Check /> 分离在本机完成，支持取消和重试</li>
+                </ul>
+              </section>
+            </div>
+          </article>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}>
+              <span className={styles.timelineDot} />
               <strong>v1.6.4</strong>
               <time dateTime="2026-10-25">2026-10-25</time>
               <span className={styles.releaseBadge}>性能与稳定性</span>

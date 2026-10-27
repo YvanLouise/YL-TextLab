@@ -1,8 +1,7 @@
 import {
   AudioConversionError,
-  MAX_AUDIO_BATCH_SIZE,
+  AUDIO_FILE_SIZE_LIMIT_LABEL,
   MAX_AUDIO_FILE_SIZE,
-  MAX_AUDIO_FILES,
   type AudioChannels,
   type AudioConversionOptions,
   type AudioInputFormat,
@@ -120,7 +119,7 @@ export function detectAudioFormat(bytes: Uint8Array, fileName = ''): AudioInputF
 
 export async function inspectAudioFile(file: File) {
   if (file.size > MAX_AUDIO_FILE_SIZE) {
-    throw new AudioConversionError('FILE_TOO_LARGE', '单个音频文件不能超过 100 MB。')
+    throw new AudioConversionError('FILE_TOO_LARGE', `单个音频文件不能超过 ${AUDIO_FILE_SIZE_LIMIT_LABEL}。`)
   }
   const header = new Uint8Array(await file.slice(0, 512).arrayBuffer())
   const format = detectAudioFormat(header, file.name)
@@ -128,29 +127,6 @@ export async function inspectAudioFile(file: File) {
     throw new AudioConversionError('UNSUPPORTED_FORMAT', '无法识别此音频格式。')
   }
   return format
-}
-
-export function validateAudioBatch(currentFiles: File[], additions: File[]) {
-  const room = MAX_AUDIO_FILES - currentFiles.length
-  if (room <= 0) {
-    throw new AudioConversionError('FILE_COUNT_LIMIT', `每批最多添加 ${MAX_AUDIO_FILES} 个音频文件。`)
-  }
-  const accepted: File[] = []
-  let total = currentFiles.reduce((sum, file) => sum + file.size, 0)
-  for (const file of additions) {
-    if (accepted.length >= room) break
-    if (!file.size || file.size > MAX_AUDIO_FILE_SIZE) continue
-    if (total + file.size > MAX_AUDIO_BATCH_SIZE) continue
-    accepted.push(file)
-    total += file.size
-  }
-  if (!accepted.length && additions.length) {
-    throw new AudioConversionError('BATCH_SIZE_LIMIT', '文件不能为空；单批音频总大小不能超过 500 MB，单个文件不能超过 100 MB。')
-  }
-  return {
-    accepted,
-    ignored: additions.length - accepted.length,
-  }
 }
 
 export function outputMime(format: AudioInputFormat) {
@@ -201,7 +177,7 @@ export function qualityLabel(
 }
 
 export function estimateAudioOutputSize(durationSeconds: number | null, options: AudioConversionOptions) {
-  if (options.mode === 'metadata-only') return null
+  if (options.mode !== 'transcode') return null
   if (durationSeconds === null || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return null
   if (options.format === 'flac') return null
   if (options.format === 'wav') {
@@ -220,7 +196,14 @@ function commonAudioArgs(sampleRate: AudioSampleRate, channels: AudioChannels) {
   return args
 }
 
-function codecArgs(options: AudioConversionOptions, outputFormat: AudioInputFormat) {
+function codecArgs(options: AudioConversionOptions, outputFormat: AudioInputFormat, losslessBitDepth?: number) {
+  if (options.mode === 'lossless') {
+    if (losslessBitDepth !== 16 && losslessBitDepth !== 24) {
+      throw new AudioConversionError('LOSSLESS_PARAMETERS_REQUIRED', '无损压缩前必须确认原始音频位深。')
+    }
+    return ['-c:a', 'flac', '-compression_level', '8', '-sample_fmt', losslessBitDepth === 16 ? 's16' : 's32',
+      '-bits_per_raw_sample', String(losslessBitDepth)]
+  }
   if (options.mode === 'metadata-only') {
     const args = ['-c:a', 'copy']
     if (outputFormat === 'mp3') args.push('-id3v2_version', '3')
@@ -253,6 +236,7 @@ interface AudioCommandExtras {
   coverPath?: string | null
   includeCover?: boolean
   outputFormat?: AudioInputFormat
+  losslessBitDepth?: number
 }
 
 const metadataKeys: Array<[keyof AudioMetadata, string]> = [
@@ -271,10 +255,10 @@ export function buildAudioCommand(
   options: AudioConversionOptions,
   extras: AudioCommandExtras = {},
 ) {
-  const outputFormat = extras.outputFormat ?? options.format
+  const outputFormat = options.mode === 'lossless' ? 'flac' : extras.outputFormat ?? options.format
   const includeCover = extras.includeCover ?? supportsCoverArt(outputFormat)
   const coverPath = includeCover ? extras.coverPath : null
-  const args = ['-i', inputPath]
+  const args = [...(options.mode === 'lossless' ? ['-xerror'] : []), '-i', inputPath]
   if (coverPath) args.push('-i', coverPath)
   args.push('-map', '0:a:0')
   if (includeCover) {
@@ -290,7 +274,7 @@ export function buildAudioCommand(
       if (value) args.push('-metadata', `${ffmpegKey}=${value}`)
     }
   }
-  args.push(...codecArgs(options, outputFormat))
+  args.push(...codecArgs(options, outputFormat, extras.losslessBitDepth))
   if (options.mode === 'transcode') {
     args.push(...commonAudioArgs(options.sampleRate, options.channels))
   }

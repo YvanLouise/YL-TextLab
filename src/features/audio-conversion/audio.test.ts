@@ -5,11 +5,11 @@ import {
   effectiveBitrateKbps,
   estimateAudioOutputSize,
   formatAudioDuration,
+  inspectAudioFile,
   metadataOutputFileName,
   outputFileName,
   outputMime,
   qualityLabel,
-  validateAudioBatch,
 } from './audio'
 import { DEFAULT_AUDIO_OPTIONS, MAX_AUDIO_FILE_SIZE } from './types'
 
@@ -123,21 +123,16 @@ describe('audio conversion helpers', () => {
       .toEqual(expect.arrayContaining(['-c:a', 'flac', '-compression_level', '5']))
   })
 
-  it('enforces file count and batch size limits', () => {
-    const small = new File(['audio'], 'track.mp3')
-    expect(validateAudioBatch([], [small, small])).toEqual({ accepted: [small, small], ignored: 0 })
-    const tooLarge = new File([new Uint8Array(1)], 'large.wav')
-    Object.defineProperty(tooLarge, 'size', { value: MAX_AUDIO_FILE_SIZE + 1 })
-    expect(() => validateAudioBatch([], [tooLarge])).toThrow('500 MB')
+  it('accepts files above the previous limit up to exactly 500 MB', async () => {
+    for (const size of [101 * 1024 * 1024, 500 * 1024 * 1024]) {
+      const file = Object.defineProperty(new File([bytes('RIFF----WAVE')], 'large.wav'), 'size', { value: size })
+      await expect(inspectAudioFile(file)).resolves.toBe('wav')
+    }
   })
 
-  it('skips rejected inputs without using queue slots or hiding later files that fit', () => {
-    const file = (name: string, size: number) => Object.defineProperty(new File(['a'], name), 'size', { value: size })
-    const current = Array.from({ length: 19 }, (_, index) => file(`${index}.mp3`, 1))
-    const good = file('good.mp3', 10)
-    expect(validateAudioBatch(current, [file('large.mp3', 101 * 1024 * 1024), good]).accepted).toEqual([good])
-    const almostFull = [file('existing.mp3', 499 * 1024 * 1024)]
-    expect(validateAudioBatch(almostFull, [file('too-big.mp3', 2 * 1024 * 1024), good]).accepted).toEqual([good])
+  it('rejects one byte above the single-file limit', async () => {
+    const oversized = Object.defineProperty(new File(['RIFF----WAVE'], 'large.wav'), 'size', { value: MAX_AUDIO_FILE_SIZE + 1 })
+    await expect(inspectAudioFile(oversized)).rejects.toThrow('单个音频文件不能超过 500 MB')
   })
 
   it('formats durations for tracks and long recordings', () => {

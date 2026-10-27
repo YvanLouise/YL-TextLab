@@ -21,6 +21,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ToolHeader } from '../components/SiteHeader'
 import { AUDIO_ACCEPT, describeAudioError } from '../features/audio-conversion/audio'
+import { AUDIO_FILE_SIZE_LIMIT_LABEL } from '../features/audio-conversion/types'
 import {
   clampSplitRange,
   createSplitFileName,
@@ -35,6 +36,7 @@ import {
   VIDEO_ACCEPT,
 } from '../features/audio-splitting/audio'
 import type {
+  AudioChannelSplitResult,
   AudioSplitEngine,
   AudioSplitEngineFactory,
   AudioSplitInputFormat,
@@ -49,6 +51,7 @@ import { useSelectionPlayback } from '../features/audio-splitting/useSelectionPl
 interface AudioAnalysis {
   duration: number
   peaks: number[]
+  channels?: number | null
 }
 
 type AudioAnalyzer = (file: File, sourceUrl: string, sourceKind: AudioSplitSourceKind) => Promise<AudioAnalysis>
@@ -95,7 +98,7 @@ const defaultAnalyzer: AudioAnalyzer = async (file, sourceUrl, sourceKind) => {
     const context = new AudioContextConstructor()
     try {
       const buffer = await context.decodeAudioData(await file.arrayBuffer())
-      return { duration: buffer.duration, peaks: createWaveformPeaks(buffer.getChannelData(0), 8192) }
+      return { duration: buffer.duration, peaks: createWaveformPeaks(buffer.getChannelData(0), 8192), channels: buffer.numberOfChannels }
     } finally {
       await context.close()
     }
@@ -131,6 +134,9 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
   const [endText, setEndText] = useState('00:00.000')
   const [dragging, setDragging] = useState(false)
   const [outputFormat, setOutputFormat] = useState<AudioSplitOutputFormat>('original')
+  const [mode, setMode] = useState<'clip' | 'channels'>('clip')
+  const [sourceChannels, setSourceChannels] = useState<number | null>(null)
+  const [channelResults, setChannelResults] = useState<Array<AudioChannelSplitResult & { url: string }>>([])
   const [customOutputName, setCustomOutputName] = useState('')
   const [notice, setNotice] = useState('请选择需要分割的音频，或需要提取音轨的视频。')
   const [loading, setLoading] = useState(false)
@@ -149,6 +155,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
   const releaseResult = useCallback(() => {
     setResultUrl(null)
     setResult(null)
+    setChannelResults([])
   }, [])
 
   useEffect(() => () => {
@@ -163,6 +170,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
     setFile(null)
     setInputFormat(null)
     setSourceKind('audio')
+    setSourceChannels(null)
     setSourceUrl(null)
     setDuration(0)
     setPeaks([])
@@ -181,6 +189,9 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
   useEffect(() => () => {
     if (resultUrl) URL.revokeObjectURL(resultUrl)
   }, [resultUrl])
+  useEffect(() => () => {
+    channelResults.forEach(result => URL.revokeObjectURL(result.url))
+  }, [channelResults])
 
   const getEngine = async (operation: number) => {
     if (!engineRef.current) {
@@ -211,7 +222,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
           if (operation !== operationRef.current) throw error
           setNotice('浏览器正在使用本地引擎分析视频音轨，首次加载约 31 MB。')
           const engine = await getEngine(operation)
-          return { duration: await engine.probe(nextFile), peaks: [] }
+          return { duration: await engine.probe(nextFile), peaks: [], channels: null }
         })
       if (operation !== operationRef.current) { URL.revokeObjectURL(nextUrl); return }
       if (!Number.isFinite(analysis.duration) || analysis.duration < MIN_SPLIT_SECONDS) throw new Error('Invalid duration')
@@ -219,6 +230,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
       setFile(nextFile)
       setInputFormat(source.format)
       setSourceKind(source.kind)
+      setSourceChannels(analysis.channels ?? null)
       setSourceUrl(nextUrl)
       setDuration(initialEnd)
       setPeaks(analysis.peaks)
@@ -228,7 +240,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
       setEndText(formatPreciseTime(initialEnd))
       playback.seek(0)
       setCustomOutputName('')
-      setOutputFormat(source.kind === 'video' ? 'mp3' : 'original')
+      setOutputFormat(mode === 'channels' ? 'wav' : source.kind === 'video' ? 'mp3' : 'original')
       setNotice(source.kind === 'video'
         ? '已读取视频音轨。请选择区域并导出为 MP3 或 WAV。'
         : '拖动波形上的边界，或输入时间来选择需要提取的区域。')
@@ -284,8 +296,8 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
     setNotice('正在初始化本地分割引擎，首次加载约 31 MB。')
     try {
       const engine = await getEngine(operation)
-      setNotice('正在提取所选音频区域。')
-      const nextResult = await engine.split({
+      setNotice(mode === 'channels' ? '正在分离左右声道。' : '正在提取所选音频区域。')
+      const request = {
         file,
         inputFormat,
         sourceKind,
@@ -293,12 +305,21 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
         endSeconds: end,
         outputFormat,
         fileName: normalizeSplitFileName(outputName, splitExtension(inputFormat, outputFormat)),
-      }, (value) => { if (operation === operationRef.current) setProgress(value) })
-      if (operation !== operationRef.current) return
-      const url = URL.createObjectURL(nextResult.blob)
-      setResult(nextResult)
-      setResultUrl(url)
-      setNotice(sourceKind === 'video' ? '所选视频音轨已提取，可试听或下载。' : '所选片段已导出，可试听或下载。')
+      }
+      const onProgress = (value: number) => { if (operation === operationRef.current) setProgress(value) }
+      if (mode === 'channels') {
+        const results = await engine.separateChannels(request, onProgress)
+        if (operation !== operationRef.current) return
+        setChannelResults(results.map(result => ({ ...result, url: URL.createObjectURL(result.blob) })))
+        setNotice('左右声道已分离为两个单声道文件，可分别试听或下载。')
+      } else {
+        const nextResult = await engine.split(request, onProgress)
+        if (operation !== operationRef.current) return
+        const url = URL.createObjectURL(nextResult.blob)
+        setResult(nextResult)
+        setResultUrl(url)
+        setNotice(sourceKind === 'video' ? '所选视频音轨已提取，可试听或下载。' : '所选片段已导出，可试听或下载。')
+      }
     } catch (error) {
       if (operation === operationRef.current) setNotice(describeAudioError(error))
     } finally {
@@ -328,8 +349,11 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
   }
 
   const selectionDuration = Math.max(0, end - start)
+  const invalidChannels = mode === 'channels' && sourceChannels !== null && sourceChannels !== 2
   const outputName = customOutputName || (file && inputFormat
-    ? createSplitFileName(file.name, inputFormat, outputFormat, start, end)
+    ? mode === 'channels' && start === 0 && end === duration
+      ? normalizeSplitFileName(file.name, splitExtension(inputFormat, outputFormat))
+      : createSplitFileName(file.name, inputFormat, outputFormat, start, end)
     : '')
 
   return (
@@ -341,11 +365,36 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
             <span className={styles.introIcon}><Scissors aria-hidden="true" /></span>
             <div>
               <h1>音频分割与视频音轨提取</h1>
-              <p>选择音频或视频中的指定区域，试听并导出为音频文件。</p>
+              <p>剪辑音视频片段，或将歌曲的左右声道分别导出。</p>
             </div>
           </div>
           <span className={styles.localBadge}><ShieldCheck aria-hidden="true" /> 全程本地处理</span>
         </section>
+
+        <div className={styles.modeSwitch} role="group" aria-label="音频处理方式">
+          {(['clip', 'channels'] as const).map(value => (
+            <button key={value} type="button" aria-pressed={mode === value} disabled={loading || exporting}
+              onClick={() => {
+                if (mode === value) return
+                playback.stop()
+                releaseResult()
+                setMode(value)
+                setCustomOutputName('')
+                setOutputFormat(value === 'channels' ? 'wav' : sourceKind === 'video' ? 'mp3' : 'original')
+              }}>
+              {value === 'clip' ? <Scissors aria-hidden="true" /> : <Headphones aria-hidden="true" />}
+              {value === 'clip' ? '片段导出' : '左右声道分离'}
+            </button>
+          ))}
+        </div>
+        {mode === 'channels' ? <div className={styles.channelHint}>
+          <strong>左声道 → _L · 右声道 → _R</strong>
+          <p>将双声道歌曲拆成两个独立的单声道文件。默认分离整首，也可调整下方时间范围；WAV 可避免再次有损编码。</p>
+          <p>每个输出只保留对应声道；导出后的单声道试听会从两侧耳机播放。</p>
+          {invalidChannels ? <p className={styles.channelWarning} role="alert">{sourceChannels === 1
+            ? '此文件是单声道，没有独立的左、右声道可分离。'
+            : '此文件包含多个声道，请选择双声道立体声文件。'}</p> : null}
+        </div> : null}
 
         {!file ? (
           <section
@@ -371,7 +420,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
             />
             <span><UploadCloud aria-hidden="true" /></span>
             <h2>{loading ? '正在读取媒体文件…' : '选择音频或视频文件'}</h2>
-            <p>支持常用音频及 MP4、MOV、WebM、MKV、AVI，单个文件不超过 100 MB。</p>
+            <p>支持常用音频及 MP4、MOV、WebM、MKV、AVI，单个文件不超过 {AUDIO_FILE_SIZE_LIMIT_LABEL}。</p>
             <button className="button button-primary" type="button" disabled={loading} onClick={() => fileInputRef.current?.click()}>
               {loading ? <LoaderCircle className={styles.spinning} aria-hidden="true" /> : <FileAudio aria-hidden="true" />}
               选择文件
@@ -383,7 +432,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
               <span className={styles.fileIcon}>{sourceKind === 'video' ? <FileVideo aria-hidden="true" /> : <FileAudio aria-hidden="true" />}</span>
               <div>
                 <h2>{file.name}</h2>
-                <p>{sourceKind === 'video' ? '视频' : '音频'} · {inputFormat?.toUpperCase()} · {formatBytes(file.size)} · {formatPreciseTime(duration)}</p>
+                <p>{sourceKind === 'video' ? '视频' : '音频'} · {inputFormat?.toUpperCase()} · {formatBytes(file.size)} · {formatPreciseTime(duration)}{sourceChannels !== null ? ` · ${sourceChannels} 声道` : ''}</p>
               </div>
               <button type="button" aria-label="移除文件" title="移除文件" disabled={exporting} onClick={resetSource}><Trash2 aria-hidden="true" /><span>移除文件</span></button>
             </section>
@@ -489,12 +538,12 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
                   </select>
                 </label>
                 <label className={styles.fileNameField}>
-                  <span>输出文件名</span>
+                  <span>{mode === 'channels' ? '输出文件名（自动添加 _L / _R）' : '输出文件名'}</span>
                   <input value={outputName} disabled={exporting} maxLength={200} aria-label="输出文件名" onChange={(event) => { setCustomOutputName(event.target.value); releaseResult() }} />
                 </label>
-                <button className="button button-primary" type="button" disabled={exporting || Math.round(selectionDuration * 1000) < 10} onClick={() => void exportSelection()}>
+                <button className="button button-primary" type="button" disabled={exporting || invalidChannels || Math.round(selectionDuration * 1000) < 10} onClick={() => void exportSelection()}>
                   {exporting ? <LoaderCircle className={styles.spinning} aria-hidden="true" /> : <Download aria-hidden="true" />}
-                  {exporting ? `正在导出 ${progress}%` : sourceKind === 'video' ? '提取所选音频' : '导出所选片段'}
+                  {exporting ? `正在导出 ${progress}%` : mode === 'channels' ? '分离并导出左右声道' : sourceKind === 'video' ? '提取所选音频' : '导出所选片段'}
                 </button>
               </div>
               {exporting ? <div className={styles.exportProgress}>
@@ -510,6 +559,16 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
                 <a className="button button-primary" href={resultUrl} download={result.fileName}><Download aria-hidden="true" /> 下载片段</a>
               </section>
             ) : null}
+            {channelResults.length ? <section className={styles.channelResults} aria-label="左右声道分离结果">
+              {channelResults.map(channel => {
+                const label = channel.channel === 'left' ? '左声道' : '右声道'
+                return <div className={styles.resultCard} key={channel.channel}>
+                  <div><span><Headphones aria-hidden="true" /></span><div><strong>{label} · 单声道</strong><p>{channel.fileName}</p></div></div>
+                  <audio controls src={channel.url} aria-label={`${label}试听`} />
+                  <a className="button button-primary" href={channel.url} download={channel.fileName}><Download aria-hidden="true" /> 下载{label}</a>
+                </div>
+              })}
+            </section> : null}
           </>
         )}
 

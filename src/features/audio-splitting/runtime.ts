@@ -3,8 +3,8 @@ import wasmURL from '@ffmpeg/core/wasm?url'
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile } from '@ffmpeg/util'
 import { AudioConversionError } from '../audio-conversion/types'
-import { buildSplitCommand, normalizeSplitFileName, splitExtension, splitMime } from './audio'
-import type { AudioSplitEngine, AudioSplitRequest, AudioSplitResult } from './types'
+import { buildChannelSplitCommand, buildSplitCommand, createChannelFileName, normalizeSplitFileName, readWavChannelCount, splitExtension, splitMime } from './audio'
+import type { AudioChannelSplitResult, AudioSplitEngine, AudioSplitRequest, AudioSplitResult } from './types'
 
 function virtualName(prefix: string, extension: string) {
   return `${prefix}-${crypto.randomUUID?.() ?? Date.now()}.${extension}`
@@ -135,6 +135,59 @@ export class FfmpegAudioSplitEngine implements AudioSplitEngine {
     } finally {
       ffmpeg.off('progress', progressHandler)
       await Promise.all([safeDelete(ffmpeg, inputPath), safeDelete(ffmpeg, outputPath)])
+    }
+  }
+
+  async separateChannels(request: AudioSplitRequest, onProgress?: (progress: number) => void): Promise<AudioChannelSplitResult[]> {
+    await this.load()
+    const ffmpeg = this.ffmpeg
+    if (!ffmpeg) throw new AudioConversionError('ENGINE_UNAVAILABLE', '本地声道分离引擎尚未就绪。')
+    const startedAt = performance.now()
+    const extension = splitExtension(request.inputFormat, request.outputFormat)
+    const inputPath = virtualName('channel-input', request.inputFormat)
+    const probePath = virtualName('channel-probe', 'wav')
+    const outputPaths = [virtualName('left', extension), virtualName('right', extension)]
+    let lastProgress = -1
+    const progressHandler = ({ time }: { time: number }) => {
+      if (!Number.isFinite(time)) return
+      const value = Math.round(Math.max(0, Math.min(0.99, time / 1_000_000 / (request.endSeconds - request.startSeconds))) * 100)
+      if (value !== lastProgress) { lastProgress = value; onProgress?.(value) }
+    }
+    try {
+      await ffmpeg.writeFile(inputPath, await fetchFile(request.file))
+      // Decode only a short prefix without downmixing; the WAV header retains the source channel count.
+      const probeCode = await ffmpeg.exec([
+        '-i', inputPath, '-map', '0:a:0', '-vn', '-t', '0.02', '-c:a', 'pcm_s16le', probePath,
+      ])
+      if (probeCode !== 0) throw new AudioConversionError('PROBE_FAILED', '无法读取文件的声道信息。')
+      const probeData = await ffmpeg.readFile(probePath)
+      const channels = typeof probeData === 'string' ? null : readWavChannelCount(probeData)
+      if (channels !== 2) {
+        throw new AudioConversionError('INVALID_CHANNELS', channels === 1
+          ? '此文件是单声道，没有独立的左、右声道可分离。'
+          : '左右声道分离需要双声道立体声文件，请选择包含两个声道的音频或视频。')
+      }
+      ffmpeg.on('progress', progressHandler)
+      const code = await ffmpeg.exec(buildChannelSplitCommand(inputPath, outputPaths[0], outputPaths[1],
+        request.inputFormat, request.outputFormat, request.startSeconds, request.endSeconds))
+      if (code !== 0) throw new AudioConversionError('CHANNEL_SPLIT_FAILED', '声道分离失败，请检查文件或改用 WAV 输出。')
+      const results: AudioChannelSplitResult[] = []
+      for (const [index, path] of outputPaths.entries()) {
+        const data = await ffmpeg.readFile(path)
+        if (typeof data === 'string' || !data.length) throw new AudioConversionError('INVALID_OUTPUT', '引擎未生成有效的声道文件。')
+        const channel = index === 0 ? 'left' : 'right'
+        results.push({
+          channel,
+          blob: new Blob([new Uint8Array(data).buffer], { type: splitMime(request.inputFormat, request.outputFormat) }),
+          fileName: createChannelFileName(request.fileName, extension, channel),
+          durationMs: performance.now() - startedAt,
+        })
+      }
+      onProgress?.(100)
+      return results
+    } finally {
+      ffmpeg.off('progress', progressHandler)
+      await Promise.all([inputPath, probePath, ...outputPaths].map(path => safeDelete(ffmpeg, path)))
     }
   }
 
