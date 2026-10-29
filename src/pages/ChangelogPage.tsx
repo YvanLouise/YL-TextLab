@@ -36,6 +36,111 @@ export function ChangelogPage() {
 
         <div className={`page-shell ${styles.changelogBody}`}>
           <article className={styles.release}>
+            <aside className={styles.releaseMeta}><span className={styles.timelineDot} /><strong>v1.11.0</strong>
+              <time dateTime="2026-10-29">2026-10-29</time><span className={styles.releaseBadge}>PDF 内容编辑</span>
+            </aside>
+            <div className={styles.releaseNotes}><section><h2>修改内容，保留原文件</h2><ul>
+              <li><Check /> 编辑独立文字对象的内容、字号与颜色，新增文字、插入图片、删除对象</li>
+              <li><Check /> 支持页面定位、撤销重做、未保存提醒与另存为 PDF，不以覆盖标注冒充内容修改</li>
+              <li><Check /> 本机 Worker 处理，PDFium 与中文字体从本站按需加载；修正汉字与部首字形的 Unicode 映射歧义</li>
+              <li><Check /> 明确逐行编辑、内置字体、无 OCR、加密 / 签名文档与复杂嵌套对象限制；删除不等于安全脱敏</li>
+              <li><Check /> 升级 PDF.js 至安全修复版本，并兼容新版文档权限接口</li>
+            </ul></section></div>
+          </article>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}><span className={styles.timelineDot} /><strong>未发布</strong>
+              <time dateTime="2026-10-29">2026-10-29</time><span className={styles.releaseBadge}>主唱净化</span>
+            </aside>
+            <div className={styles.releaseNotes}><section><h2>温和突出人声主旋律</h2><ul>
+              <li><Check /> 新增主唱净化，默认优先保留音色与咬字，提供三档强度、音域和输入声道选择</li>
+              <li><Check /> 可先净化 20 秒试听，再导出整段；对照原声、净化人声和被削弱的声音</li>
+              <li><Check /> 本机后台处理，可停止和重试；保持原采样率并输出浮点 WAV</li>
+              <li><Check /> 预计算谐波参数、复用掩码并减少整段内存复制；修复试听越界定位与快速切换误报，0% 明确标为原声对照</li>
+              <li><Check /> 明确同音高和声残留、强抑制伤音色及内存限制，提供手动频谱修整入口</li>
+            </ul></section></div>
+          </article>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}><span className={styles.timelineDot} /><strong>v1.10.0</strong>
+              <time dateTime="2026-10-29">2026-10-29</time><span className={styles.releaseBadge}>PDF 阅读增强</span>
+            </aside>
+            <div className={styles.releaseNotes}><section><h2>查找、阅读与提取 PDF 内容</h2><ul>
+              <li><Check /> 新增缩略图、内嵌目录、文档信息、全文搜索、跨页跳转和文字高亮</li>
+              <li><Check /> 支持文字选择与复制、全文 TXT 和当前页 PNG 导出，以及系统查看与打印入口</li>
+              <li><Check /> 密码文件本机解密，支持错误密码重试；遵循复制和打印权限</li>
+              <li><Check /> 适应整页、全屏、键盘操作与手机导航；修复页面原生方向和放大后的滚动访问</li>
+              <li><Check /> 单文件 100 MB 限制、按需缩略图、画布像素保护、可取消任务与旧任务隔离；中文映射及解码资源本地托管</li>
+            </ul></section></div>
+          </article>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}><span className={styles.timelineDot} /><strong>v1.9.1</strong>
+              <time dateTime="2026-10-29">2026-10-29</time><span className={styles.releaseBadge}>相减保护与音量对照</span>
+            </aside>
+            <div className={styles.releaseNotes}><section><h2>只消减可靠片段，查看整段音量变化</h2><ul>
+              <li><Check /> 保留严格 A−B，新增局部匹配保护模式，跳过 B 独有、低相关和新增过载的片段</li>
+              <li><Check /> A/B/C 全段 RMS 与峰值曲线，共用绝对 dBFS 刻度，可定位到同一时间对照试听</li>
+              <li><Check /> 明确防削波的整段衰减，显示衰减前后数据，避免将整体变小误认为内容被删除</li>
+              <li><Check /> 分块校验同文件，支持改名副本提示且不误判同名同大小文件；补充完全静音与反相 B 提示</li>
+              <li><Check /> 保护分析失败不退回严格相减，保留源文件供重试</li>
+            </ul></section></div>
+          </article>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}><span className={styles.timelineDot} /><strong>v1.9.0</strong>
+              <time dateTime="2026-10-28">2026-10-28</time><span className={styles.releaseBadge}>音频系统优化</span>
+            </aside>
+            <div className={styles.releaseNotes}><section><h2>统一音频工作流，减少内存开销</h2><ul>
+              <li><Check /> 四个音频工具统一导航，队列文件搜索与状态筛选，试听自动暂停其他音频</li>
+              <li><Check /> 共用可取消引擎加载与超时恢复，修复旧任务干扰及资源释放问题</li>
+              <li><Check /> 转换与分割按需读取原文件，元数据探测时长，大文件波形降级仍可精确导出</li>
+              <li><Check /> 参数校验和处理中设置锁定，单个输出 256 MB 安全限制，拒绝下载截断结果</li>
+              <li><Check /> 频谱播放指针独立渲染，新增音量、跟随播放和清空音频，减少播放时重绘</li>
+            </ul></section></div>
+          </article>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}><span className={styles.timelineDot} /><strong>v1.8.2</strong>
+              <time dateTime="2026-10-28">2026-10-28</time><span className={styles.releaseBadge}>手动频谱去除</span>
+            </aside>
+            <div className={styles.releaseNotes}><section><h2>框选时间与频率，去除指定区域的声音</h2><ul>
+              <li><Check /> 频谱画 MIDI 增加“去除频谱”模式，支持框选、精确数值、最多 50 个区域与独立撤销重做</li>
+              <li><Check /> 本机后台执行频谱消减，保留原采样率、声道和时长；未选时间保持原解码采样</li>
+              <li><Check /> 原音频与处理结果切换试听、查看频谱，直接下载 32 位浮点 WAV</li>
+              <li><Check /> 支持停止重试、修改区域使旧结果失效；不覆盖原文件、不上传，音符编辑保持独立</li>
+            </ul></section></div>
+          </article>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}><span className={styles.timelineDot} /><strong>v1.8.1</strong>
+              <time dateTime="2026-10-28">2026-10-28</time><span className={styles.releaseBadge}>自动波形消减</span>
+            </aside>
+            <div className={styles.releaseNotes}><section><h2>自动对齐同源相似波形，再消减</h2><ul>
+              <li><Check /> 音频相减增加可选自动匹配：多点取样、采样级时间校准、音量估计和极性检测</li>
+              <li><Check /> 可设置搜索中心、搜索范围与消减强度，查看真实匹配数据并转为手动微调</li>
+              <li><Check /> 不可靠匹配明确停止；保留手动相减、试听、停止处理和直接下载 WAV</li>
+              <li><Check /> 波形分析在本机后台线程执行，音频不上传，不进行自动变速或时间拉伸</li>
+            </ul></section></div>
+          </article>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}><span className={styles.timelineDot} /><strong>v1.8.0</strong>
+              <time dateTime="2026-10-28">2026-10-28</time><span className={styles.releaseBadge}>频谱画 MIDI</span>
+            </aside>
+            <div className={styles.releaseNotes}><section><h2>以真实频谱为底图，手工转写 MIDI</h2><ul>
+              <li><Check /> 新增本机后台频谱分析与 A0–C8 钢琴卷帘，支持频谱精度、亮度与时间缩放</li>
+              <li><Check /> 手工绘制、移动和拉伸音符，支持力度、数值微调、节拍吸附与撤销重做</li>
+              <li><Check /> 原音频与 MIDI 同步对照试听，直接导出标准 MIDI，支持保存与载入编辑工程</li>
+              <li><Check /> 桌面与手机布局、键盘编辑；不上传音频，不把泛音伪装成自动音符识别</li>
+            </ul></section></div>
+          </article>
+          <article className={styles.release}>
+            <aside className={styles.releaseMeta}>
+              <span className={styles.timelineDot} /><strong>v1.7.0</strong>
+              <time dateTime="2026-10-28">2026-10-28</time><span className={styles.releaseBadge}>音频相减</span>
+            </aside>
+            <div className={styles.releaseNotes}><section><h2>两段音频相减，生成音频 C</h2><ul>
+              <li><Check /> 新增音频相减工具，按采样点计算 A − B，支持本地试听和 WAV 直接下载</li>
+              <li><Check /> 可调整 B 的音量比例与时间偏移，并提供输出防削波</li>
+              <li><Check /> 以 A 的采样率和时长输出，自动重采样 B；明确提示不兼容的声道与残余声音原因</li>
+              <li><Check /> 支持停止、重试、替换和交换音频；离开页面释放文件资源</li>
+            </ul></section></div>
+          </article>
+          <article className={styles.release}>
             <aside className={styles.releaseMeta}>
               <span className={styles.timelineDot} />
               <strong>v1.6.5</strong>

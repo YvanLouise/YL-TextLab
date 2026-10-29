@@ -26,118 +26,27 @@
 .workspace {
   display: grid;
   min-width: 0;
-  grid-template-columns: 230px minmax(0, 1fr);
+  grid-template-columns: 250px minmax(0, 1fr);
   grid-template-areas:
     'navigation hero'
     'navigation feature';
-  column-gap: 44px;
+  column-gap: 36px;
   padding-bottom: 56px;
 }
 
 .toolNavigation {
   grid-area: navigation;
   min-width: 0;
-  min-height: calc(100vh - 66px);
-  padding: 36px 24px 36px 0;
+  padding: 32px 20px 36px 0;
   border-right: 1px solid var(--border-soft);
 }
-
-.navigationGroup {
-  padding-bottom: 26px;
-}
-
-.navigationGroup + .navigationGroup {
-  padding-top: 26px;
-  border-top: 1px solid var(--border-soft);
-}
-
-.navigationGroup h2 {
-  margin: 0 0 12px;
-  color: var(--text-strong);
-  font-size: 13px;
-  letter-spacing: 0.04em;
-}
-
-.navigationItems {
-  display: grid;
-  gap: 5px;
-}
-
-.navigationItems button,
-.plannedTool {
-  position: relative;
-  display: grid;
-  width: 100%;
-  min-height: 52px;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--text);
-  font-family: inherit;
-  font-size: 14px;
-  text-align: left;
-}
-
-.navigationItems button {
-  cursor: pointer;
-  transition: background var(--motion-fast), color var(--motion-fast);
-}
-
-.navigationItems button:hover {
-  background: var(--surface-muted);
-}
-
-.navigationItems button > svg,
-.plannedTool > svg {
-  width: 21px;
-  height: 21px;
-  stroke-width: 1.8;
-}
-
-.rowArrow {
-  width: 15px !important;
-  height: 15px !important;
-  opacity: 0;
-  transform: translateX(-4px);
-  transition: opacity var(--motion-fast), transform var(--motion-fast);
-}
-
-.navigationItems button:hover .rowArrow,
-.selectedTool .rowArrow {
-  opacity: 1;
-  transform: none;
-}
-
-.navigationItems .selectedTool {
-  background: linear-gradient(90deg, var(--primary-soft), color-mix(in srgb, var(--primary-soft) 45%, transparent));
-  color: var(--primary);
-  font-weight: 700;
-}
-
-.selectedTool::before {
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--primary);
-  content: '';
-}
-
-.plannedTool {
-  color: var(--text-muted);
-}
-
-.plannedTool small {
-  color: var(--text-muted);
-  font-size: 9px;
-  white-space: nowrap;
-}
+.plannedGroup { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border-soft); }
+.plannedGroup h2 { margin: 0 8px 8px; font-size: 12px; color: var(--text-muted); }
+.navigationItems { display: grid; gap: 4px; }
+.plannedTool { display: flex; align-items: center; gap: 10px; padding: 10px; color: var(--text-muted); font-size: 12px; }
+.plannedTool > svg { width: 18px; height: 18px; }
+.plannedTool small { margin-left: auto; font-size: 10px; white-space: nowrap; }
+.detailPanel { grid-area: feature; min-width: 0; scroll-margin-top: 88px; }
 
 .featureContent {
   grid-area: feature;
@@ -507,61 +416,14 @@
 @media (max-width: 900px) {
   .workspace {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      'hero'
-      'navigation'
-      'feature';
+    grid-template-areas: 'hero' 'navigation' 'feature';
     gap: 20px;
   }
-
-  .toolNavigation {
-    display: flex;
-    overflow-x: auto;
-    min-height: 0;
-    padding: 0;
-    border-right: 0;
-    border-bottom: 1px solid var(--border-soft);
-    scrollbar-width: none;
-  }
-
-  .toolNavigation::-webkit-scrollbar { display: none; }
-
-  .navigationGroup {
-    display: contents;
-  }
-
-  .navigationGroup h2 {
-    display: none;
-  }
-
-  .navigationItems {
-    display: flex;
-  }
-
-  .navigationGroup + .navigationGroup {
-    padding: 0;
-    border: 0;
-  }
-
-  .navigationItems button,
-  .plannedTool {
-    min-width: max-content;
-    min-height: 48px;
-    grid-template-columns: 20px auto auto;
-    border-radius: 0;
-  }
-
-  .selectedTool::before {
-    top: auto;
-    right: 8px;
-    bottom: 0;
-    left: 8px;
-    width: auto;
-    height: 3px;
-    border-radius: 3px 3px 0 0;
-  }
-
-  .rowArrow { display: none; }
+  .toolNavigation { padding: 0 0 22px; border-right: 0; border-bottom: 1px solid var(--border-soft); }
+  .plannedGroup { margin-top: 20px; padding-top: 16px; }
+  .navigationItems { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .plannedTool { flex-wrap: wrap; gap: 6px; padding: 6px; }
+  .plannedTool small { margin: 0; }
 }
 
 @media (max-width: 680px) {
@@ -585,23 +447,6 @@
   .workspace {
     gap: 22px;
     padding-block: 0 32px;
-  }
-
-  .toolNavigation {
-    width: calc(100% + 28px);
-    margin-left: -14px;
-    padding-inline: 7px;
-  }
-
-  .navigationItems button,
-  .plannedTool {
-    min-height: 54px;
-    padding-inline: 12px;
-    font-size: 12px;
-  }
-
-  .plannedTool small {
-    display: none;
   }
 
   .featureHeader {

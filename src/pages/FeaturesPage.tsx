@@ -1,6 +1,7 @@
 import {
   ArrowDown,
   ArrowRight,
+  AudioLines,
   Archive,
   BarChart3,
   CaseSensitive,
@@ -28,29 +29,13 @@ import {
   WholeWord,
   ZoomIn,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Footer } from '../components/Footer'
 import { SiteHeader } from '../components/SiteHeader'
+import { ToolDirectory } from '../components/ToolDirectory'
+import { tools } from '../navigation/tools'
+import type { ToolId } from '../navigation/tools'
 import styles from './FeaturesPage.module.css'
-
-type ToolId = 'replace' | 'notionSplit' | 'pdf' | 'image' | 'audio' | 'audioSplit'
-
-interface ToolNavigationItem {
-  id: ToolId
-  title: string
-  icon: LucideIcon
-}
-
-const liveTools: ToolNavigationItem[] = [
-  { id: 'replace', title: '关键词替换', icon: Search },
-  { id: 'notionSplit', title: 'Notion 文本切分', icon: Rows3 },
-  { id: 'pdf', title: 'PDF 查看', icon: FileText },
-  { id: 'image', title: '图片转换与压缩', icon: Images },
-  { id: 'audio', title: '音频格式转换', icon: Music2 },
-  { id: 'audioSplit', title: '音频分割与提取', icon: Scissors },
-]
 
 const plannedTools = [
   { title: '文本清理', icon: ScanText },
@@ -127,14 +112,18 @@ const notionSplitCapabilities = [
 const pdfWorkflow = [
   { title: '选择文件', description: '从本机选择需要阅读的 PDF。', icon: FolderOpen },
   { title: '本地解析', description: '浏览器直接解析，不上传文件。', icon: ShieldCheck },
-  { title: '阅读与下载', description: '翻页、缩放、旋转并下载原文件。', icon: Download },
+  { title: '编辑与导出', description: '修改内容并另存为，或提取文字与页面图片。', icon: Download },
 ]
 
 const pdfCapabilities = [
-  { title: '翻页与跳转', description: '使用按钮或页码快速定位内容。', icon: RefreshCw },
-  { title: '缩放与适应宽度', description: '按阅读场景调整页面显示比例。', icon: ZoomIn },
-  { title: '旋转与下载', description: '调整页面方向，并随时下载原文件。', icon: RotateCw },
-  { title: '本地隐私', description: '文件仅在当前浏览器中读取，不会上传。', icon: LockKeyhole },
+  { title: '目录与缩略图', description: '使用内嵌目录、缩略图、页码或键盘快速定位内容。', icon: RefreshCw },
+  { title: '全文搜索', description: '普通文字查找、区分大小写、跨页结果跳转与高亮，不支持扫描件 OCR。', icon: Search },
+  { title: '阅读显示', description: '适应宽度、适应整页、25%–300% 缩放与全屏，保留 PDF 原生方向。', icon: ZoomIn },
+  { title: '旋转与内容导出', description: '复制本页文字、导出全文 TXT 或本页 PNG；阅读旋转不会修改原 PDF。', icon: RotateCw },
+  { title: '内容编辑', description: '修改独立文字、字号与颜色，插入文字 / 图片，删除对象；支持撤销重做并另存为。', icon: FileText },
+  { title: '编辑范围', description: '逐行编辑、使用内置字体，不自动重排；扫描件无 OCR，加密 / 签名文件及复杂嵌套对象暂不编辑。', icon: ShieldCheck },
+  { title: '密码与权限', description: '输入打开密码后在本机解密，遵循文档复制与打印权限，密码不保存。', icon: LockKeyhole },
+  { title: '本地隐私', description: '单文件最大 100 MB；文件、搜索索引和密码均不上传、不保存草稿。', icon: ShieldCheck },
 ]
 
 const imageWorkflow = [
@@ -180,25 +169,7 @@ const audioSplitCapabilities = [
 function ToolNavigation({ selected, onSelect }: { selected: ToolId; onSelect: (id: ToolId) => void }) {
   return (
     <aside className={styles.toolNavigation} aria-label="功能选择">
-      <div className={styles.navigationGroup}>
-        <h2>已上线</h2>
-        <div className={styles.navigationItems}>
-          {liveTools.map(({ id, title, icon: Icon }) => (
-            <button
-              className={selected === id ? styles.selectedTool : ''}
-              type="button"
-              aria-pressed={selected === id}
-              onClick={() => onSelect(id)}
-              key={id}
-            >
-              <Icon aria-hidden="true" />
-              <span>{title}</span>
-              <ChevronRight className={styles.rowArrow} aria-hidden="true" />
-            </button>
-          ))}
-        </div>
-      </div>
-
+      <ToolDirectory variant="sidebar" selected={selected} onSelect={onSelect} />
       <div className={`${styles.navigationGroup} ${styles.plannedGroup}`}>
         <h2>计划中</h2>
         <div className={styles.navigationItems}>
@@ -350,7 +321,7 @@ function PdfFeature() {
         <span className={styles.featureIcon}><FileText aria-hidden="true" /></span>
         <div>
           <h2>PDF 查看</h2>
-          <p>直接在浏览器中打开本机 PDF，支持翻页、缩放与旋转。</p>
+          <p>本机阅读、全文搜索、目录导航与内容提取，支持密码文件。</p>
         </div>
         <Link className="button button-primary" to="/pdf">
           打开工具 <ArrowRight aria-hidden="true" />
@@ -517,8 +488,92 @@ function AudioSplitFeature() {
   )
 }
 
+function AudioSubtractFeature() {
+  return <div className={styles.featureContent}>
+    <header className={styles.featureHeader}>
+      <span className={styles.featureIcon}><AudioLines aria-hidden="true" /></span>
+      <div><h2>音频相减</h2><p>从音频 A 中减去音频 B 的波形，试听并下载新的音频 C。</p></div>
+      <Link className="button button-primary" to="/audio-subtract">打开工具 <ArrowRight aria-hidden="true" /></Link>
+    </header>
+    <section className={`${styles.pdfPreview} ${styles.imagePreview}`}>
+      <AudioLines aria-hidden="true" /><h3>C = A − B</h3>
+      <p>A 是人声＋伴奏，B 是完全一致的伴奏时，可通过对齐后相减抵消伴奏。不同录音或混音通常无法完全抵消。</p>
+      <Link className="button button-primary" to="/audio-subtract">选择两段音频 <ArrowRight aria-hidden="true" /></Link>
+    </section>
+    <Workflow items={[
+      { title: '选择 A 和 B', description: '添加两段同源音频，先试听确认内容。', icon: UploadCloud },
+      { title: '调整抵消设置', description: '手动调整，或开启自动匹配以校准时间、音量和极性。', icon: Settings2 },
+      { title: '试听音频 C', description: '生成后试听并直接下载 32 位浮点 WAV。', icon: Download },
+    ]} />
+    <section className={styles.detailList}>
+      <header><ShieldCheck aria-hidden="true" /><h2>相减规则</h2></header>
+      <div className={styles.detailRows}>
+        {[
+          ['自动匹配相似波形', '在搜索中心附近 ±250 ms / 1 / 3 / 10 秒内多点取样，校准整段时间偏移、音量和极性；匹配不可靠时停止。'],
+          ['消减强度与微调', '10–100% 控制应用的估计音量，可查看相关系数并转为手动微调。相关系数不是消除成功率。'],
+          ['对齐的适用条件', '按采样点相减，仅时长或旋律相同不保证抵消；不做逐段变速、拉伸或混响修复。'],
+          ['时长与采样率', '使用 A 的时长和采样率，自动重采样 B。声道数须相同；B 未覆盖的部分保留 A。'],
+          ['输出防削波', '仅在幅度溢出时整体降低音量。关闭后浮点 WAV 保留原始运算幅度。'],
+          ['本地处理', '文件不上传、不持久保存，可停止并重新处理；每个源文件 500 MB，结果最多 256 MB。'],
+        ].map(([title, description]) => <article key={title}><span className={styles.ruleIcon}><Check aria-hidden="true" /></span><h3>{title}</h3><p>{description}</p></article>)}
+      </div>
+    </section>
+  </div>
+}
+
+function AudioMidiFeature() {
+  return <div className={styles.featureContent}>
+    <header className={styles.featureHeader}><span className={styles.featureIcon}><Music2 aria-hidden="true" /></span>
+      <div><h2>频谱画 MIDI</h2><p>以真实音高频谱为背景，描出音符或去除指定区域的声音。</p></div>
+      <Link className="button button-primary" to="/audio-midi">打开工具 <ArrowRight aria-hidden="true" /></Link>
+    </header>
+    <section className={`${styles.pdfPreview} ${styles.imagePreview}`}>
+      <Music2 aria-hidden="true" /><h3>看频谱，画音符</h3>
+      <p>横轴是时间，纵轴对齐 A0–C8 钢琴音高。可以描绘音符，也可切换“去除频谱”框选时间与频率，生成真正去除该频段后的音频。</p>
+      <Link className="button button-primary" to="/audio-midi">开始手动转写 <ArrowRight aria-hidden="true" /></Link>
+    </section>
+    <Workflow items={[
+      { title: '生成音高频谱', description: '导入最长 10 分钟的本机音频，在后台分析频率能量。', icon: UploadCloud },
+      { title: '描绘或去除', description: '手工编辑音符；或框选去除区域，用时间和 Hz 数值精确调整。', icon: Settings2 },
+      { title: '试听并导出', description: '对照原音频试听，导出 MIDI 或按原采样率、原声道导出去除后的 WAV。', icon: Download },
+    ]} />
+    <p>频谱去除最多支持 50 个区域，独立撤销、重做，可停止后重试。选区内所有叠加的声音都会受影响；边缘平滑过渡，不是按乐器自动分离。始终从原文件重新生成，选区外的时间不变。</p>
+    <p>去除处理支持解码后最多 128 MB，导出 32 位浮点 WAV，不保留歌曲标签或封面。音符工程不含去除区域与音频，离开前请下载处理结果。</p>
+    <p>本工具用于频谱辅助人工转写，不自动识别音符。亮线可能是基频或泛音；MIDI 文件不包含原录音。文件不上传、不自动保存。</p>
+  </div>
+}
+
+function AudioVocalFeature() {
+  return <div className={styles.featureContent}>
+    <header className={styles.featureHeader}><span className={styles.featureIcon}><Music2 aria-hidden="true" /></span>
+      <div><h2>主唱净化</h2><p>从已分离的人声出发，保留主唱音色，温和压低次要声音。</p></div>
+      <Link className="button button-primary" to="/audio-vocal">打开工具 <ArrowRight aria-hidden="true" /></Link>
+    </header>
+    <section className={`${styles.pdfPreview} ${styles.imagePreview}`}><Music2 aria-hidden="true" /><h3>先试听，再决定抑制强度</h3>
+      <p>跟随较强、连续的人声音高，优先保留对应谐波；支持齿音与气声保护，提供净化人声和被削弱声音的对照试听。</p>
+      <Link className="button button-primary" to="/audio-vocal">选择人声音轨 <ArrowRight aria-hidden="true" /></Link>
+    </section>
+    <Workflow items={[
+      { title: '导入分离后的人声', description: '支持单声道或立体声，可选原声道、居中、左声道或右声道。', icon: UploadCloud },
+      { title: '自然保留先试听', description: '从指定位置处理 20 秒，再调整音域、强度和弱声门限。', icon: Settings2 },
+      { title: '净化整段并下载', description: '保留原采样率，输出 32 位浮点 WAV，可停止并重试。', icon: Download },
+    ]} />
+    <p>同音高重叠的和声、混响或更响的次要人声可能保留，也可能跟错旋律。强抑制会改变音色，不保证只剩主唱；低覆盖率时采用温和降噪。输入最多 500 MB，整段最多 10 分钟，解码后最多 128 MB。输出不保留标签与封面。</p>
+  </div>
+}
+
 export function FeaturesPage() {
-  const [selectedTool, setSelectedTool] = useState<ToolId>('replace')
+  const [params, setParams] = useSearchParams()
+  const selected = tools.find(tool => tool.id === params.get('tool')) ?? tools[0]
+  const selectedTool = selected.id
+  const setSelectedTool = (id: ToolId) => {
+    setParams(previous => { const next = new URLSearchParams(previous); next.set('tool', id); return next })
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      requestAnimationFrame(() => document.getElementById('tool-details')?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start',
+      }))
+    }
+  }
 
   return (
     <div className={styles.page}>
@@ -527,9 +582,10 @@ export function FeaturesPage() {
         <div className={`page-shell ${styles.workspace}`}>
           <section className={styles.hero}>
             <h1>功能中心</h1>
-            <p>关键词替换、Notion 文本切分、PDF 查看、图片转换、音频转换与分割均已上线。</p>
+            <p>按任务找到合适的工具，查看使用流程与功能说明。</p>
           </section>
           <ToolNavigation selected={selectedTool} onSelect={setSelectedTool} />
+          <section id="tool-details" className={styles.detailPanel} aria-label={`${selected.title}功能说明`}>
           {selectedTool === 'replace'
             ? <ReplacementFeature />
             : selectedTool === 'notionSplit'
@@ -540,7 +596,12 @@ export function FeaturesPage() {
                   ? <ImageFeature />
                   : selectedTool === 'audio'
                     ? <AudioFeature />
-                    : <AudioSplitFeature />}
+                    : selectedTool === 'audioSplit'
+                      ? <AudioSplitFeature />
+                      : selectedTool === 'audioSubtract'
+                        ? <AudioSubtractFeature />
+                        : selectedTool === 'audioVocal' ? <AudioVocalFeature /> : <AudioMidiFeature />}
+          </section>
         </div>
       </main>
       <Footer />

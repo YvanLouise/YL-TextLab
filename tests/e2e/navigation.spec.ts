@@ -1,0 +1,108 @@
+import { expect, test } from '@playwright/test'
+
+test('category menu searches by use case and opens the correct live tool', async ({ page, isMobile }) => {
+  const errors: string[] = []
+  const engineRequests: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('request', request => { if (/ffmpeg-core|\.wasm/.test(request.url())) engineRequests.push(request.url()) })
+  await page.goto('/')
+  const trigger = page.getByRole('button', { name: isMobile ? '打开导航菜单' : '工具分类', exact: true })
+  await trigger.click()
+  const panel = isMobile ? page.getByRole('dialog', { name: '导航菜单' }) : page.getByRole('region', { name: '工具分类面板' })
+  await expect(panel.getByRole('heading', { name: '文本与文档' })).toBeVisible()
+  await expect(panel.getByRole('heading', { name: '图片处理' })).toBeVisible()
+  await expect(panel.getByRole('heading', { name: '音频处理' })).toBeVisible()
+  await expect(panel.getByText('敬请期待')).toHaveCount(0)
+  await panel.getByRole('searchbox').fill('无损')
+  await expect(panel.getByRole('link', { name: '图片转换与压缩', exact: true })).toBeVisible()
+  await expect(panel.getByRole('link', { name: '音频格式转换', exact: true })).toBeVisible()
+  await expect(panel.getByRole('link', { name: 'PDF 查看', exact: true })).toHaveCount(0)
+  await panel.getByRole('searchbox').fill('nothing-matches')
+  await expect(panel.getByText('没有找到相关工具')).toBeVisible()
+  await panel.getByRole('button', { name: '清除工具搜索' }).click()
+  await panel.getByRole('searchbox').fill('音频 相减')
+  await panel.getByRole('link', { name: '音频相减', exact: true }).click()
+  await expect(page).toHaveURL(/\/audio-subtract$/)
+  await expect(page).toHaveTitle(/音频相减/)
+  await expect(panel).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: '音频相减', exact: true })).toBeVisible()
+  expect(errors).toEqual([])
+  expect(engineRequests).toEqual([])
+})
+
+test('feature selection survives refresh and browser history', async ({ page, isMobile }) => {
+  await page.goto('/features?tool=audioMidi')
+  await expect(page.getByRole('heading', { name: '频谱画 MIDI', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'PDF 查看', exact: true }).click()
+  await expect(page).toHaveURL(/tool=pdf$/)
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'PDF 查看', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await page.goBack()
+  await expect(page.getByRole('heading', { name: '频谱画 MIDI', exact: true })).toBeVisible()
+  await page.goForward()
+  await expect(page.getByRole('heading', { name: 'PDF 查看', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: isMobile ? '打开导航菜单' : '工具分类', exact: true }).click()
+  await page.goBack()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByRole('region', { name: '工具分类面板' })).toHaveCount(0)
+  await page.goForward()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByRole('region', { name: '工具分类面板' })).toHaveCount(0)
+  await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden')
+  await expect(page.getByText('敬请期待', { exact: true })).toHaveCount(3)
+  await expect(page.getByRole('link', { name: '文本清理' })).toHaveCount(0)
+})
+
+test('homepage categories filter only the chosen tools', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '音频处理 5' }).click()
+  await expect(page.locator('#features article')).toHaveCount(5)
+  await expect(page.getByRole('heading', { name: '音频相减', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '图片处理 1' }).click()
+  await expect(page.locator('#features article')).toHaveCount(1)
+  await page.getByRole('button', { name: '全部工具 9' }).click()
+  await expect(page.locator('#features article')).toHaveCount(12)
+  await expect(page.getByText('敬请期待', { exact: true })).toHaveCount(3)
+})
+
+test('keyboard dismissal and responsive transitions do not trap the page', async ({ page, isMobile }) => {
+  await page.goto('/replace')
+  const trigger = page.getByRole('button', { name: isMobile ? '打开导航菜单' : '工具分类', exact: true })
+  await trigger.focus()
+  await trigger.press(isMobile ? 'Enter' : 'ArrowDown')
+  const panel = isMobile ? page.getByRole('dialog') : page.getByRole('region', { name: '工具分类面板' })
+  await expect(panel).toBeVisible()
+  if (isMobile) {
+    await expect(panel.getByRole('button', { name: '关闭导航菜单' })).toBeFocused()
+    for (let index = 0; index < 20; index++) {
+      await page.keyboard.press('Tab')
+      expect(await panel.evaluate(element => element.contains(document.activeElement))).toBe(true)
+    }
+  } else {
+    await expect(panel.getByRole('searchbox')).toBeFocused()
+  }
+  await page.keyboard.press('Escape')
+  await expect(panel).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+  await trigger.click()
+  await page.setViewportSize({ width: isMobile ? 1280 : 390, height: 844 })
+  await expect(panel).toHaveCount(0)
+  await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden')
+  expect(await page.locator('html').evaluate(element => element.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width)
+})
+
+test('navigation remains usable at narrow desktop, tablet and phone sizes', async ({ page }) => {
+  for (const width of [320, 390, 768, 980, 1024, 1280, 1536]) {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto('/features?tool=image')
+    await expect(page.getByRole('heading', { name: '功能中心' })).toBeVisible()
+    expect(await page.locator('html').evaluate(element => element.scrollWidth)).toBeLessThanOrEqual(width)
+    await page.getByRole('button', { name: width <= 980 ? '打开导航菜单' : '工具分类', exact: true }).click()
+    const panel = width <= 980 ? page.getByRole('dialog') : page.getByRole('region', { name: '工具分类面板' })
+    await expect(panel).toBeVisible()
+    await panel.getByRole('searchbox').fill('midi')
+    await expect(panel.getByRole('link', { name: '频谱画 MIDI', exact: true })).toBeVisible()
+    expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+    await page.keyboard.press('Escape')
+  }
+})

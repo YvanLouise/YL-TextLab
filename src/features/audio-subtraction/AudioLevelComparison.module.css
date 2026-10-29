@@ -1,0 +1,46 @@
+.panel { min-width: 0; padding: 18px; margin-top: 22px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.header h3 { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text-strong); font-size: 16px; }
+.header p, .note, .inspector p { margin: 7px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.8; }
+.metric { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 12px; }
+.metric select { min-height: 38px; max-width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text-strong); font: inherit; }
+.gainNotice { padding: 10px 12px; border-radius: 8px; background: var(--surface-blue); color: var(--text); font-size: 12px; line-height: 1.8; }
+.tracks { display: flex; flex-direction: column; gap: 18px; margin-top: 20px; }
+.sourceA { color: var(--primary); }
+.sourceB { color: var(--text-muted); }
+.raw { color: #a75d00; }
+:global(:root[data-theme='dark']) .raw { color: #ffba66; }
+.outputC { color: var(--success); }
+.trackHeading { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 5px 12px; margin-bottom: 8px; font-size: 12px; }
+.trackHeading strong { font-size: 13px; }
+.trackHeading span { color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart { display: flex; gap: 8px; height: 86px; }
+.axis { position: relative; width: 36px; flex-shrink: 0; color: var(--text-muted); font-size: 10px; text-align: right; }
+.axis span { position: absolute; right: 0; }
+.axis span:first-child { top: 0; }
+.axis span:nth-child(2) { transform: translateY(-50%); }
+.axis span:last-child { bottom: 0; }
+.plot { position: relative; flex: 1; min-width: 0; overflow: hidden; border-bottom: 1px solid var(--border); cursor: crosshair; background: var(--surface-blue); }
+.plot svg { display: block; width: 100%; height: 100%; }
+.grid { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cursor { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--text-strong); pointer-events: none; }
+.timeline { display: flex; justify-content: space-between; gap: 8px; padding-left: 44px; margin-top: 8px; color: var(--text-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.inspector { padding: 12px; margin-top: 18px; border: 1px solid var(--border-soft); border-radius: 9px; background: var(--surface-blue); }
+.inspector label { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px; color: var(--text-strong); font-size: 12px; }
+.inspector label span { color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.inspector input { display: block; width: 100%; min-height: 36px; margin: 2px 0; accent-color: var(--primary); }
+.readings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; color: var(--text); font-size: 11px; font-variant-numeric: tabular-nums; }
+.readings span { display: flex; flex-wrap: wrap; gap: 4px; }
+.inspector button { min-height: 38px; margin-top: 12px; font-size: 12px; }
+.note { margin-top: 12px; }
+@media (max-width: 650px) {
+  .panel { padding: 13px; }
+  .metric { width: 100%; justify-content: space-between; }
+  .metric select { font-size: 16px; }
+  .trackHeading { display: block; }
+  .trackHeading span { display: block; margin-top: 4px; line-height: 1.6; }
+  .chart { height: 80px; }
+  .inspector { padding: 10px; }
+  .readings { grid-template-columns: 1fr; }
+  .inspector button { width: 100%; padding-inline: 8px; }
+}

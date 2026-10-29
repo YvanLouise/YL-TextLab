@@ -5,19 +5,16 @@ import {
   Check,
   ClipboardList,
   CopyCheck,
-  FileText,
   FileSearch,
-  Images,
   LockKeyhole,
-  Music2,
-  RefreshCw,
-  Rows3,
   ScanText,
-  Scissors,
   ShieldCheck,
   Sparkles,
   Square,
 } from 'lucide-react'
+import { useState } from 'react'
+import { tools, toolCategories } from '../navigation/tools'
+import type { ToolCategoryId } from '../navigation/tools'
 import { Link } from 'react-router-dom'
 import { Footer } from '../components/Footer'
 import { SiteHeader } from '../components/SiteHeader'
@@ -56,6 +53,8 @@ const assurances = [
 ]
 
 export function HomePage() {
+  const [category, setCategory] = useState<ToolCategoryId | 'all'>('all')
+  const visibleTools = tools.filter(tool => category === 'all' || tool.category === category)
   return (
     <div className={styles.page}>
       <SiteHeader />
@@ -91,128 +90,29 @@ export function HomePage() {
           <div className="page-shell">
             <div className={styles.sectionHeading}>
               <h2 id="features-title">功能概览</h2>
-              <p>关键词替换、Notion 文本切分、PDF 查看、图片转换、音频转换与分割均已上线。</p>
+              <p>文本、PDF、图片与音频处理，以及频谱辅助 MIDI 转写均已上线。</p>
             </div>
+            <div className={styles.categoryFilters} role="group" aria-label="按分类浏览工具">
+              <button type="button" aria-pressed={category === 'all'} onClick={() => setCategory('all')}>全部工具 <span>{tools.length}</span></button>
+              {toolCategories.map(item => <button key={item.id} type="button"
+                aria-pressed={category === item.id} onClick={() => setCategory(item.id)}>
+                {item.title} <span>{tools.filter(tool => tool.category === item.id).length}</span>
+              </button>)}
+            </div>
+            <p className="sr-only" role="status">显示 {visibleTools.length} 个已上线工具</p>
             <div className={styles.featureGrid}>
-              <article className={`${styles.featureCard} ${styles.activeCard}`}>
-                <div className={styles.cardTop}>
-                  <span className={`${styles.iconBox} ${styles.activeIcon}`}>
-                    <RefreshCw aria-hidden="true" />
-                  </span>
-                  <h3>关键词替换</h3>
-                  <span className={styles.onlineBadge}>已上线</span>
-                </div>
-                <p>将文本中的指定关键词替换为新的内容，支持多种匹配选项，精准高效。</p>
-                <ul>
-                  {['替换全部或第一个匹配项', '区分大小写 / 全字匹配', '实时预览替换结果', '匹配数量统计'].map(
-                    (item) => (
-                      <li key={item}>
-                        <Check aria-hidden="true" /> {item}
-                      </li>
-                    ),
-                  )}
-                </ul>
-                <Link className={styles.cardLink} to="/replace">
-                  立即使用 <ArrowRight aria-hidden="true" />
-                </Link>
-              </article>
-
-              <article className={`${styles.featureCard} ${styles.activeCard}`}>
-                <div className={styles.cardTop}>
-                  <span className={`${styles.iconBox} ${styles.activeIcon}`}>
-                    <Rows3 aria-hidden="true" />
-                  </span>
-                  <h3>Notion 文本切分</h3>
-                  <span className={styles.onlineBadge}>已上线</span>
-                </div>
-                <p>将超长文本自动拆分为低于粘贴上限的片段，方便按顺序复制到 Notion。</p>
-                <ul>
-                  {['默认每段最多 2,000 个可见字符', '优先保留段落与句子边界', '每段独立复制与状态反馈', '本机草稿自动保存且不上传'].map((item) => (
-                    <li key={item}><Check aria-hidden="true" /> {item}</li>
-                  ))}
-                </ul>
-                <Link className={styles.cardLink} to="/notion-split">
-                  立即使用 <ArrowRight aria-hidden="true" />
-                </Link>
-              </article>
-
-              <article className={`${styles.featureCard} ${styles.activeCard}`}>
-                <div className={styles.cardTop}>
-                  <span className={`${styles.iconBox} ${styles.activeIcon}`}>
-                    <FileText aria-hidden="true" />
-                  </span>
-                  <h3>PDF 查看</h3>
-                  <span className={styles.onlineBadge}>已上线</span>
-                </div>
-                <p>直接在浏览器打开本机 PDF，支持翻页、缩放、旋转与下载原文件。</p>
-                <ul>
-                  {['本机文件直接查看', '翻页与页码跳转', '缩放和适应宽度', '旋转与原文件下载'].map((item) => (
-                    <li key={item}><Check aria-hidden="true" /> {item}</li>
-                  ))}
-                </ul>
-                <Link className={styles.cardLink} to="/pdf">
-                  立即使用 <ArrowRight aria-hidden="true" />
-                </Link>
-              </article>
-
-              <article className={`${styles.featureCard} ${styles.activeCard}`}>
-                <div className={styles.cardTop}>
-                  <span className={`${styles.iconBox} ${styles.activeIcon}`}>
-                    <Images aria-hidden="true" />
-                  </span>
-                  <h3>图片转换与压缩</h3>
-                  <span className={styles.onlineBadge}>已上线</span>
-                </div>
-                <p>单张或批量转换图片格式、压缩体积并按需控制目标大小，全程本地完成。</p>
-                <ul>
-                  {['PNG / JPG / WebP 转换与压缩', 'ICO / TGA / DDS 格式转换', '目标大小与自动缩放', '单图直下与批量 ZIP'].map((item) => (
-                    <li key={item}><Check aria-hidden="true" /> {item}</li>
-                  ))}
-                </ul>
-                <Link className={styles.cardLink} to="/image-convert">
-                  立即使用 <ArrowRight aria-hidden="true" />
-                </Link>
-              </article>
-
-              <article className={`${styles.featureCard} ${styles.activeCard}`}>
-                <div className={styles.cardTop}>
-                  <span className={`${styles.iconBox} ${styles.activeIcon}`}>
-                    <Music2 aria-hidden="true" />
-                  </span>
-                  <h3>音频格式转换</h3>
-                  <span className={styles.onlineBadge}>已上线</span>
-                </div>
-                <p>本地转换音乐格式或无损压缩为 FLAC，支持文件夹批量压缩与歌曲信息编辑。</p>
-                <ul>
-                  {['MP3 / WAV / FLAC / M4A', 'AAC / OGG / Opus 输出', '无损压缩与采样校验', '文件夹批量处理、试听与 ZIP 下载'].map((item) => (
-                    <li key={item}><Check aria-hidden="true" /> {item}</li>
-                  ))}
-                </ul>
-                <Link className={styles.cardLink} to="/audio-convert">
-                  立即使用 <ArrowRight aria-hidden="true" />
-                </Link>
-              </article>
-
-              <article className={`${styles.featureCard} ${styles.activeCard}`}>
-                <div className={styles.cardTop}>
-                  <span className={`${styles.iconBox} ${styles.activeIcon}`}>
-                    <Scissors aria-hidden="true" />
-                  </span>
-                  <h3>音频分割与提取</h3>
-                  <span className={styles.onlineBadge}>已上线</span>
-                </div>
-                <p>截取音频片段、提取视频音轨，或将歌曲的左右声道分别导出。</p>
-                <ul>
-                  {['音频与视频文件输入', '毫秒级开始与结束时间', '左右声道独立试听与下载', 'MP3 / WAV 音轨提取'].map((item) => (
-                    <li key={item}><Check aria-hidden="true" /> {item}</li>
-                  ))}
-                </ul>
-                <Link className={styles.cardLink} to="/audio-split">
-                  立即使用 <ArrowRight aria-hidden="true" />
-                </Link>
-              </article>
-
-              {upcomingFeatures.map(({ title, description, icon: Icon, items }) => (
+              {visibleTools.map(({ id, title, description, features, path, icon: Icon }) => (
+                <article key={id} className={`${styles.featureCard} ${styles.activeCard}`}>
+                  <div className={styles.cardTop}>
+                    <span className={`${styles.iconBox} ${styles.activeIcon}`}><Icon aria-hidden="true" /></span>
+                    <h3>{title}</h3><span className={styles.onlineBadge}>已上线</span>
+                  </div>
+                  <p>{description}</p>
+                  <ul>{features.map(item => <li key={item}><Check aria-hidden="true" /> {item}</li>)}</ul>
+                  <Link className={styles.cardLink} to={path}>立即使用 <ArrowRight aria-hidden="true" /></Link>
+                </article>
+              ))}
+              {category === 'all' ? upcomingFeatures.map(({ title, description, icon: Icon, items }) => (
                 <article className={`${styles.featureCard} ${styles.upcomingCard}`} key={title}>
                   <div className={styles.cardTop}>
                     <span className={styles.iconBox}>
@@ -230,7 +130,7 @@ export function HomePage() {
                     ))}
                   </ul>
                 </article>
-              ))}
+              )) : null}
             </div>
 
             <div className={styles.assuranceBand}>

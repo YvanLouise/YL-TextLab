@@ -1,0 +1,6 @@
+# Preserve PDF offsets and font bytes across Windows and Linux checkouts.
+*.pdf binary
+*.ttf binary
+
+# Keep the upstream font license verbatim.
+public/pdf-editor/OFL.txt -whitespace

@@ -22,10 +22,17 @@ const AudioSplitPage = lazy(() =>
   import('./pages/AudioSplitPage').then((module) => ({ default: module.AudioSplitPage })),
 )
 
+const AudioSubtractPage = lazy(() =>
+  import('./pages/AudioSubtractPage').then((module) => ({ default: module.AudioSubtractPage })),
+)
+
+const AudioMidiPage = lazy(() => import('./pages/AudioMidiPage').then(module => ({ default: module.AudioMidiPage })))
+const AudioVocalPage = lazy(() => import('./pages/AudioVocalPage').then(module => ({ default: module.AudioVocalPage })))
+
 const titles: Record<string, string> = {
   '/features': '全部功能', '/replace': '关键词替换', '/notion-split': 'Notion 文本切分',
   '/pdf': 'PDF 查看', '/image-convert': '图片转换与压缩', '/audio-convert': '音频格式转换',
-  '/audio-split': '音频分割与提取', '/help': '使用帮助', '/changelog': '更新日志',
+  '/audio-split': '音频分割与提取', '/audio-subtract': '音频相减', '/audio-midi': '音频频谱画 MIDI', '/audio-vocal': '主唱净化', '/help': '使用帮助', '/changelog': '更新日志',
 }
 
 function RouteEffects() {
@@ -70,6 +77,9 @@ export default function App() {
           path="/audio-split"
           element={<AudioSplitPage />}
         />
+        <Route path="/audio-subtract" element={<AudioSubtractPage />} />
+        <Route path="/audio-midi" element={<AudioMidiPage />} />
+        <Route path="/audio-vocal" element={<AudioVocalPage />} />
         <Route path="/help" element={<HelpPage />} />
         <Route path="/changelog" element={<ChangelogPage />} />
         <Route path="*" element={<Navigate replace to="/" />} />

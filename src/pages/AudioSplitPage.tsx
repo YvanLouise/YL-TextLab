@@ -20,12 +20,13 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ToolHeader } from '../components/SiteHeader'
+import { AudioToolNav } from '../components/AudioToolNav'
+import { useAudioLeaveWarning } from '../features/audio-shared/useAudioLeaveWarning'
 import { AUDIO_ACCEPT, describeAudioError } from '../features/audio-conversion/audio'
 import { AUDIO_FILE_SIZE_LIMIT_LABEL } from '../features/audio-conversion/types'
 import {
   clampSplitRange,
   createSplitFileName,
-  createWaveformPeaks,
   formatPreciseTime,
   inspectSplitSource,
   isLikelyVideoFile,
@@ -47,66 +48,12 @@ import type {
 import styles from './AudioSplitPage.module.css'
 import { AudioSplitWaveform } from './AudioSplitWaveform'
 import { useSelectionPlayback } from '../features/audio-splitting/useSelectionPlayback'
-
-interface AudioAnalysis {
-  duration: number
-  peaks: number[]
-  channels?: number | null
-}
-
-type AudioAnalyzer = (file: File, sourceUrl: string, sourceKind: AudioSplitSourceKind) => Promise<AudioAnalysis>
+import { analyzeSplitAudio, type AudioAnalyzer } from '../features/audio-splitting/analyzer'
+import { pauseAudioPreviews } from '../features/audio-shared/media'
 
 const defaultEngineFactory: AudioSplitEngineFactory = async () => {
   const { createFfmpegAudioSplitEngine } = await import('../features/audio-splitting/runtime')
   return createFfmpegAudioSplitEngine()
-}
-
-function readNativeDuration(sourceUrl: string, sourceKind: AudioSplitSourceKind) {
-  return new Promise<number | null>((resolve) => {
-    const media = sourceKind === 'video' ? document.createElement('video') : new Audio()
-    let settled = false
-    const timeout = window.setTimeout(() => finish(null), 12000)
-    const finish = (value: number | null) => {
-      if (settled) return
-      settled = true
-      window.clearTimeout(timeout)
-      media.onloadedmetadata = null
-      media.ontimeupdate = null
-      media.onerror = null
-      media.removeAttribute('src')
-      media.load()
-      resolve(value)
-    }
-    media.preload = 'metadata'
-    media.onloadedmetadata = () => {
-      if (Number.isFinite(media.duration)) {
-        finish(media.duration)
-        return
-      }
-      media.ontimeupdate = () => finish(Number.isFinite(media.duration) ? media.duration : null)
-      media.currentTime = Number.MAX_SAFE_INTEGER
-    }
-    media.onerror = () => finish(null)
-    media.src = sourceUrl
-  })
-}
-
-const defaultAnalyzer: AudioAnalyzer = async (file, sourceUrl, sourceKind) => {
-  try {
-    const AudioContextConstructor = window.AudioContext
-    if (!AudioContextConstructor) throw new Error('AudioContext unavailable')
-    const context = new AudioContextConstructor()
-    try {
-      const buffer = await context.decodeAudioData(await file.arrayBuffer())
-      return { duration: buffer.duration, peaks: createWaveformPeaks(buffer.getChannelData(0), 8192), channels: buffer.numberOfChannels }
-    } finally {
-      await context.close()
-    }
-  } catch {
-    const duration = await readNativeDuration(sourceUrl, sourceKind)
-    if (duration === null) throw new Error('无法读取媒体时长或其中不含可用音轨')
-    return { duration, peaks: [] }
-  }
 }
 
 function formatBytes(bytes: number) {
@@ -121,8 +68,9 @@ interface AudioSplitPageProps {
   analyzeAudio?: AudioAnalyzer
 }
 
-export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAudio = defaultAnalyzer }: AudioSplitPageProps) {
+export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAudio = analyzeSplitAudio }: AudioSplitPageProps) {
   const [file, setFile] = useState<File | null>(null)
+  useAudioLeaveWarning(!!file)
   const [inputFormat, setInputFormat] = useState<AudioSplitInputFormat | null>(null)
   const [sourceKind, setSourceKind] = useState<AudioSplitSourceKind>('audio')
   const [sourceUrl, setSourceUrl] = useState<string | null>(null)
@@ -140,6 +88,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
   const [customOutputName, setCustomOutputName] = useState('')
   const [notice, setNotice] = useState('请选择需要分割的音频，或需要提取音轨的视频。')
   const [loading, setLoading] = useState(false)
+  const [analysisNote, setAnalysisNote] = useState('')
   const [exporting, setExporting] = useState(false)
   const [progress, setProgress] = useState(0)
   const [result, setResult] = useState<AudioSplitResult | null>(null)
@@ -149,6 +98,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
   const engineRef = useRef<AudioSplitEngine | null>(null)
   const operationRef = useRef(0)
   const busyRef = useRef(false)
+  const analysisController = useRef<AbortController | null>(null)
   const playback = useSelectionPlayback(audioRef, sourceUrl, start, end, duration, setNotice)
   const { currentTime, isPlaying } = playback
 
@@ -161,11 +111,16 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
   useEffect(() => () => {
     operationRef.current += 1
     engineRef.current?.dispose()
+    analysisController.current?.abort()
   }, [])
 
   const resetSource = () => {
+    analysisController.current?.abort()
+    engineRef.current?.dispose(); engineRef.current = null
+    busyRef.current = false; setLoading(false)
     operationRef.current += 1
     playback.stop()
+    pauseAudioPreviews()
     releaseResult()
     setFile(null)
     setInputFormat(null)
@@ -174,6 +129,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
     setSourceUrl(null)
     setDuration(0)
     setPeaks([])
+    setAnalysisNote('')
     setStart(0)
     setEnd(0)
     playback.seek(0)
@@ -209,6 +165,8 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
     if (busyRef.current) return
     busyRef.current = true
     const operation = ++operationRef.current
+    analysisController.current?.abort()
+    const controller = new AbortController(); analysisController.current = controller
     setLoading(true)
     const likelyKind: AudioSplitSourceKind = isLikelyVideoFile(nextFile) ? 'video' : 'audio'
     setNotice(likelyKind === 'video' ? '正在读取视频音轨与时长。' : '正在读取音频与生成波形。')
@@ -217,12 +175,13 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
     const nextUrl = URL.createObjectURL(nextFile)
     try {
       const source = await inspectSplitSource(nextFile)
-      const analysis = await analyzeAudio(nextFile, nextUrl, likelyKind).catch(async (error) => {
-          if (likelyKind !== 'video') throw error
+      controller.signal.throwIfAborted()
+      const analysis = await analyzeAudio(nextFile, nextUrl, likelyKind, controller.signal).catch(async (error) => {
+          controller.signal.throwIfAborted()
           if (operation !== operationRef.current) throw error
-          setNotice('浏览器正在使用本地引擎分析视频音轨，首次加载约 31 MB。')
+          setNotice('正在用本地引擎读取音轨信息，首次加载约 31 MB。')
           const engine = await getEngine(operation)
-          return { duration: await engine.probe(nextFile), peaks: [], channels: null }
+          return { duration: await engine.probe(nextFile), peaks: [], channels: null, notice: '已读取音轨时长；浏览器不支持此格式的波形，可按时间选择并导出。' }
         })
       if (operation !== operationRef.current) { URL.revokeObjectURL(nextUrl); return }
       if (!Number.isFinite(analysis.duration) || analysis.duration < MIN_SPLIT_SECONDS) throw new Error('Invalid duration')
@@ -234,6 +193,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
       setSourceUrl(nextUrl)
       setDuration(initialEnd)
       setPeaks(analysis.peaks)
+      setAnalysisNote(analysis.notice ?? '')
       setStart(0)
       setEnd(initialEnd)
       setStartText(formatPreciseTime(0))
@@ -250,6 +210,14 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
     } finally {
       if (operation === operationRef.current) { busyRef.current = false; setLoading(false) }
     }
+  }
+
+  const cancelAnalysis = () => {
+    operationRef.current++; analysisController.current?.abort(); analysisController.current = null
+    engineRef.current?.cancel(); engineRef.current = null
+    busyRef.current = false; setLoading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+    setNotice('已停止读取媒体文件，可以重新选择文件。')
   }
 
   const updateStart = (value: number) => {
@@ -290,6 +258,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
     busyRef.current = true
     const operation = ++operationRef.current
     playback.stop()
+    pauseAudioPreviews()
     setExporting(true)
     setProgress(0)
     releaseResult()
@@ -359,7 +328,7 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
   return (
     <div className={styles.page}>
       <ToolHeader toolName="本地音视频音轨工具" />
-      <main className={`page-shell ${styles.workspace}`}>
+      <main className={`page-shell ${styles.workspace}`} onPlayCapture={event => { if (event.target instanceof HTMLMediaElement) pauseAudioPreviews(event.target) }}>
         <section className={styles.intro}>
           <div>
             <span className={styles.introIcon}><Scissors aria-hidden="true" /></span>
@@ -370,6 +339,8 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
           </div>
           <span className={styles.localBadge}><ShieldCheck aria-hidden="true" /> 全程本地处理</span>
         </section>
+
+        <AudioToolNav />
 
         <div className={styles.modeSwitch} role="group" aria-label="音频处理方式">
           {(['clip', 'channels'] as const).map(value => (
@@ -415,19 +386,23 @@ export function AudioSplitPage({ engineFactory = defaultEngineFactory, analyzeAu
               aria-label="选择要处理的音频或视频文件"
               onChange={(event) => {
                 const nextFile = event.target.files?.[0]
+                event.target.value = ''
                 if (nextFile) void loadFile(nextFile)
               }}
             />
             <span><UploadCloud aria-hidden="true" /></span>
             <h2>{loading ? '正在读取媒体文件…' : '选择音频或视频文件'}</h2>
             <p>支持常用音频及 MP4、MOV、WebM、MKV、AVI，单个文件不超过 {AUDIO_FILE_SIZE_LIMIT_LABEL}。</p>
+            <p>大文件跳过完整波形以控制内存；仍可按时间剪辑。单个输出上限 256 MB。</p>
             <button className="button button-primary" type="button" disabled={loading} onClick={() => fileInputRef.current?.click()}>
               {loading ? <LoaderCircle className={styles.spinning} aria-hidden="true" /> : <FileAudio aria-hidden="true" />}
               选择文件
             </button>
+            {loading ? <button className="button" type="button" onClick={cancelAnalysis}>停止读取</button> : null}
           </section>
         ) : (
           <>
+            {analysisNote ? <p className={styles.channelHint} role="note">{analysisNote}</p> : null}
             <section className={styles.sourceCard}>
               <span className={styles.fileIcon}>{sourceKind === 'video' ? <FileVideo aria-hidden="true" /> : <FileAudio aria-hidden="true" />}</span>
               <div>

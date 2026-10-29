@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildAudioCommand,
   detectAudioFormat,
+  describeAudioError,
   effectiveBitrateKbps,
   estimateAudioOutputSize,
   formatAudioDuration,
@@ -10,6 +11,7 @@ import {
   outputFileName,
   outputMime,
   qualityLabel,
+  validateAudioOptions,
 } from './audio'
 import { DEFAULT_AUDIO_OPTIONS, MAX_AUDIO_FILE_SIZE } from './types'
 
@@ -18,6 +20,23 @@ function bytes(value: string) {
 }
 
 describe('audio conversion helpers', () => {
+  it('rejects empty sources and invalid codec parameters before starting an engine', async () => {
+    await expect(inspectAudioFile(new File([], 'empty.wav'))).rejects.toThrow('空')
+    for (const value of [NaN, Infinity, 0, 321, 128.5]) {
+      expect(() => validateAudioOptions({ ...DEFAULT_AUDIO_OPTIONS, qualityMode: 'custom', customBitrateKbps: value })).toThrow()
+    }
+    expect(() => validateAudioOptions({ ...DEFAULT_AUDIO_OPTIONS, sampleRate: 12345 as 44100 })).toThrow()
+    expect(() => validateAudioOptions({ ...DEFAULT_AUDIO_OPTIONS, mode: 'metadata-only', customBitrateKbps: NaN })).not.toThrow()
+  })
+
+  it('does not invent original WAV parameters or misreport cancellation as insufficient memory', () => {
+    expect(estimateAudioOutputSize(60, { ...DEFAULT_AUDIO_OPTIONS, format: 'wav' })).toBeNull()
+    expect(estimateAudioOutputSize(60, { ...DEFAULT_AUDIO_OPTIONS, format: 'wav', sampleRate: 48000, channels: 'stereo' })).toBeGreaterThan(11_000_000)
+    expect(describeAudioError(new DOMException('aborted', 'AbortError'))).toContain('已停止')
+    expect(describeAudioError(new Error('Failed to fetch'))).toContain('检查网络')
+    expect(describeAudioError(new RangeError('out of memory'))).toContain('内存不足')
+  })
+
   it('detects common containers by header and distinguishes Opus from OGG', () => {
     const wav = new Uint8Array(12)
     wav.set(bytes('RIFF'), 0)

@@ -86,7 +86,7 @@ test('help, changelog and mobile navigation are usable', async ({ page, isMobile
     await page.getByRole('button', { name: '打开导航菜单' }).click()
     const mobileNavigation = page.getByRole('navigation', { name: '移动端导航' })
     await expect(mobileNavigation).toBeVisible()
-    await expect(mobileNavigation.getByRole('link', { name: 'Notion 切分' })).toBeVisible()
+    await expect(mobileNavigation.getByRole('link', { name: 'Notion 文本切分' })).toBeVisible()
     await expect.poll(async () => (await mobileNavigation.boundingBox())?.height).toBe(
       page.viewportSize()?.height,
     )
@@ -192,13 +192,13 @@ test('opens and controls a local PDF from the features page', async ({ page }) =
   await expect.poll(async () => Number(await canvas.getAttribute('width'))).toBeGreaterThan(0)
 
   await page.getByRole('button', { name: '放大' }).click()
-  await expect(page.getByText(/%$/)).toBeVisible()
+  await expect(page.getByLabel('缩放模式')).not.toHaveValue('fit')
   await page.getByRole('button', { name: '顺时针旋转' }).click()
   await expect(page.getByRole('button', { name: '上一页' })).toBeDisabled()
   await expect(page.getByRole('button', { name: '下一页' })).toBeDisabled()
 
   const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: '下载原文件' }).click()
+  await page.getByRole('link', { name: '下载原文件' }).click()
   const downloadedFile = await download
   expect(downloadedFile.suggestedFilename()).toBe('sample.pdf')
   await downloadedFile.delete()

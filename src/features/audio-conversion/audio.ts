@@ -118,6 +118,7 @@ export function detectAudioFormat(bytes: Uint8Array, fileName = ''): AudioInputF
 }
 
 export async function inspectAudioFile(file: File) {
+  if (!file.size) throw new AudioConversionError('EMPTY_FILE', '音频文件为空，请重新选择有效文件。')
   if (file.size > MAX_AUDIO_FILE_SIZE) {
     throw new AudioConversionError('FILE_TOO_LARGE', `单个音频文件不能超过 ${AUDIO_FILE_SIZE_LIMIT_LABEL}。`)
   }
@@ -151,6 +152,19 @@ export function bitrateRange(format: AudioOutputFormat) {
   return customBitrateRanges[format] ?? null
 }
 
+export function validateAudioOptions(options: AudioConversionOptions) {
+  if (!['transcode', 'metadata-only', 'lossless'].includes(options.mode)) throw new AudioConversionError('INVALID_OPTIONS', '请选择有效的音频处理方式。')
+  if (options.mode !== 'transcode') return
+  if (!OUTPUT_FORMATS.some(format => format.value === options.format) || !['compact', 'standard', 'high'].includes(options.quality)
+    || !['preset', 'custom'].includes(options.qualityMode) || !['original', 44100, 48000].includes(options.sampleRate)
+    || !['original', 'mono', 'stereo'].includes(options.channels)) throw new AudioConversionError('INVALID_OPTIONS', '音频输出参数无效，请重新选择格式、采样率和声道。')
+  const range = bitrateRange(options.format)
+  if (range && options.qualityMode === 'custom' && (!Number.isInteger(options.customBitrateKbps)
+    || options.customBitrateKbps < range.min || options.customBitrateKbps > range.max)) {
+    throw new AudioConversionError('INVALID_BITRATE', `码率须为 ${range.min}–${range.max} kbps 的整数。`)
+  }
+}
+
 export function effectiveBitrateKbps(options: AudioConversionOptions) {
   const range = bitrateRange(options.format)
   if (!range) return null
@@ -181,7 +195,8 @@ export function estimateAudioOutputSize(durationSeconds: number | null, options:
   if (durationSeconds === null || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return null
   if (options.format === 'flac') return null
   if (options.format === 'wav') {
-    const sampleRate = options.sampleRate === 'original' ? 44100 : options.sampleRate
+    if (options.sampleRate === 'original' || options.channels === 'original') return null
+    const sampleRate = options.sampleRate
     const channels = options.channels === 'mono' ? 1 : 2
     return Math.ceil(durationSeconds * sampleRate * channels * 2 + 44)
   }
@@ -255,6 +270,7 @@ export function buildAudioCommand(
   options: AudioConversionOptions,
   extras: AudioCommandExtras = {},
 ) {
+  validateAudioOptions(options)
   const outputFormat = options.mode === 'lossless' ? 'flac' : extras.outputFormat ?? options.format
   const includeCover = extras.includeCover ?? supportsCoverArt(outputFormat)
   const coverPath = includeCover ? extras.coverPath : null
@@ -284,10 +300,12 @@ export function buildAudioCommand(
 
 export function describeAudioError(error: unknown) {
   if (error instanceof AudioConversionError) return error.message
-  const message = error instanceof Error ? error.message : String(error)
-  if (/memory|abort|out of bounds|allocation/i.test(message)) {
+  const message = error instanceof Error || error instanceof DOMException ? error.message : String(error)
+  if (((error instanceof Error || error instanceof DOMException) && error.name === 'AbortError') || /^(cancelled|canceled|aborted)$/i.test(message)) return '处理已停止，源文件未改变，可重新开始。'
+  if (/memory|out of bounds|allocation|out of memory/i.test(message)) {
     return '浏览器可用内存不足，请减少文件大小或关闭其他页面后重试。'
   }
+  if (/fetch|network|timeout|failed to load/i.test(message)) return '本地音频引擎资源加载失败，请检查网络后重试；音频文件不会上传。'
   if (/worker|webassembly|wasm/i.test(message)) {
     return '本地转换引擎加载失败，请确认浏览器支持 WebAssembly 后刷新重试。'
   }

@@ -104,6 +104,38 @@
   gap: 20px;
 }
 
+.categoryFilters {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 24px 0;
+}
+
+.categoryFilters button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 17px;
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.categoryFilters span { color: var(--text-muted); font-size: 11px; }
+.categoryFilters button:hover { border-color: var(--primary-border); }
+.categoryFilters button[aria-pressed='true'] { background: var(--primary-soft); color: var(--primary); border-color: var(--primary-border); font-weight: 650; }
+.categoryFilters button[aria-pressed='true'] span { color: var(--primary); }
+
+@media (max-width: 620px) {
+  .categoryFilters { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 14px 0; }
+  .categoryFilters button { min-height: 44px; justify-content: space-between; padding: 9px 12px; }
+}
+
 .featureCard {
   display: flex;
   min-height: 292px;

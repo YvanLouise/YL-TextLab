@@ -7,8 +7,9 @@ import type { AudioSplitRequest } from './types'
 
 interface Core {
   exec(...args: string[]): number
+  ffprobe(...args: string[]): number
   reset(): void
-  FS: { readFile(path: string): Uint8Array; writeFile(path: string, bytes: Uint8Array): void; unlink(path: string): void; readdir(path: string): string[] }
+  FS: { readFile(path: string): Uint8Array; writeFile(path: string, bytes: Uint8Array): void; unlink(path: string): void; readdir(path: string): string[]; mkdir(path: string): void; rmdir(path: string): void }
 }
 const state = vi.hoisted(() => ({ core: null as Core | null }))
 vi.mock('@ffmpeg/ffmpeg', () => ({ FFmpeg: class {
@@ -17,12 +18,22 @@ vi.mock('@ffmpeg/ffmpeg', () => ({ FFmpeg: class {
   on() {}
   off() {}
   async writeFile(path: string, bytes: Uint8Array) { state.core!.FS.writeFile(path, bytes) }
+  async createDir(path: string) { state.core!.FS.mkdir(path) }
+  async deleteDir(path: string) { state.core!.FS.rmdir(path) }
+  async mount(_type: string, options: { blobs: { name: string; data: Blob }[] }, path: string) {
+    for (const blob of options.blobs) state.core!.FS.writeFile(`${path}/${blob.name}`, await readBlob(blob.data))
+    return true
+  }
+  async unmount(path: string) {
+    for (const name of state.core!.FS.readdir(path).filter(name => !['.', '..'].includes(name))) state.core!.FS.unlink(`${path}/${name}`)
+  }
   async readFile(path: string, encoding?: string) {
     const bytes = state.core!.FS.readFile(path)
     return encoding === 'utf8' ? new TextDecoder().decode(bytes) : bytes
   }
   async deleteFile(path: string) { state.core!.FS.unlink(path) }
   async exec(args: string[]) { const code = state.core!.exec(...args); state.core!.reset(); return code }
+  async ffprobe(args: string[]) { const code = state.core!.ffprobe(...args); state.core!.reset(); return code }
   terminate() { this.loaded = false }
 } }))
 
@@ -71,6 +82,10 @@ beforeEach(async () => {
 afterEach(() => { engine?.dispose(); vi.unstubAllGlobals() })
 
 describe('real stereo channel separation', () => {
+  it('reads duration with ffprobe and cleans the mounted input', async () => {
+    expect(await engine.probe(request().file)).toBe(.5)
+    expect(state.core!.FS.readdir('/').filter(name => /^(source-|probe-)/.test(name))).toEqual([])
+  })
   it('preserves each channel sample and the exact selected range with no mixing', async () => {
     const results = await engine.separateChannels(request())
     expect(results.map(result => result.fileName)).toEqual(['song_L.wav', 'song_R.wav'])

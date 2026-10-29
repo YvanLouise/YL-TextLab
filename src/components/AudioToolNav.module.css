@@ -1,0 +1,11 @@
+.nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; grid-column: 1 / -1; margin-bottom: 22px; min-width: 0; }
+.link { display: flex; align-items: center; gap: 11px; padding: 13px 15px; min-width: 0; border: 1px solid var(--border-soft); border-radius: 12px; color: var(--text-muted); background: var(--surface); text-decoration: none; }
+.link svg { flex-shrink: 0; }
+.link span { min-width: 0; }
+.link strong { display: block; color: var(--text-strong); font-size: 14px; }
+.link small { display: block; font-size: 11px; margin-top: 4px; line-height: 1.5; }
+.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+.active strong { color: var(--primary); }
+@media (hover: hover) { .link:hover { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); } }
+@media (max-width: 850px) { .nav { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 18px; } .link { padding: 11px; gap: 9px; } }
+@media (max-width: 430px) { .link strong { font-size: 13px; } .link small { font-size: 10px; } .link { align-items: flex-start; } }

@@ -62,6 +62,7 @@ export function isLikelyVideoFile(file: File) {
 }
 
 export async function inspectSplitSource(file: File): Promise<AudioSplitSource> {
+  if (!file.size) throw new AudioConversionError('EMPTY_FILE', '媒体文件为空，请重新选择。')
   if (file.size > MAX_AUDIO_FILE_SIZE) {
     throw new AudioConversionError('FILE_TOO_LARGE', `单个音频或视频文件不能超过 ${AUDIO_FILE_SIZE_LIMIT_LABEL}。`)
   }

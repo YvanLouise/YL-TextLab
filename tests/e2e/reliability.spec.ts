@@ -18,6 +18,9 @@ test('every route renders with the correct title and no runtime errors', async (
     ['/', 'YL文件工具箱'], ['/features', '全部功能'], ['/replace', '关键词替换'],
     ['/notion-split', 'Notion 文本切分'], ['/pdf', 'PDF 查看'], ['/image-convert', '图片转换与压缩'],
     ['/audio-convert', '音频格式转换'], ['/audio-split', '音频分割与提取'],
+    ['/audio-subtract', '音频相减'],
+    ['/audio-midi', '音频频谱画 MIDI'],
+    ['/audio-vocal', '主唱净化'],
     ['/help', '使用帮助'], ['/changelog', '更新日志'],
   ]) {
     await page.goto(path)
@@ -33,6 +36,7 @@ test('every route renders with the correct title and no runtime errors', async (
 })
 
 test('tool navigation traps focus, restores the trigger and opens another tool', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/replace')
   const trigger = page.getByRole('button', { name: '打开导航菜单' })
   await trigger.click()

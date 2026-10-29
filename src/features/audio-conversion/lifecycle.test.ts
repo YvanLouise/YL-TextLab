@@ -20,7 +20,7 @@ describe.each([['conversion', FfmpegAudioEngine], ['splitting', FfmpegAudioSplit
     const terminatedDuringLoad = old.terminate.mock.calls.length
     await engine.load()
     finish()
-    expect(await pending).toBeInstanceOf(Error)
+    expect(await pending).toMatchObject({ name: 'AbortError' })
     expect(terminatedDuringLoad).toBe(1)
     await engine.load()
     expect(current.load).toHaveBeenCalledOnce()

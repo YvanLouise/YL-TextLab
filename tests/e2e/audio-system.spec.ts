@@ -1,0 +1,115 @@
+import { expect, test, type Page } from '@playwright/test'
+
+function wav(seconds = 8) {
+  const rate = 16000, frames = rate * seconds
+  const bytes = Buffer.alloc(44 + frames * 2)
+  bytes.write('RIFF'); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVE', 8)
+  bytes.write('fmt ', 12); bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(1, 20); bytes.writeUInt16LE(1, 22)
+  bytes.writeUInt32LE(rate, 24); bytes.writeUInt32LE(rate * 2, 28); bytes.writeUInt16LE(2, 32); bytes.writeUInt16LE(16, 34)
+  bytes.write('data', 36); bytes.writeUInt32LE(frames * 2, 40)
+  for (let i = 0; i < frames; i++) bytes.writeInt16LE(Math.round(6000 * Math.sin(2 * Math.PI * 440 * i / rate)), 44 + i * 2)
+  return bytes
+}
+
+async function fits(page: Page) {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
+}
+
+test('unified tool navigation works in light, dark and tablet layouts without eagerly loading the engine', async ({ page, isMobile }, info) => {
+  if (isMobile) await page.setViewportSize({ width: 390, height: 844 })
+  const errors: string[] = [], core: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('request', request => { if (/ffmpeg-core.*\.(wasm|js)/.test(request.url())) core.push(request.url()) })
+  await page.goto('/audio-convert')
+  const nav = page.getByRole('navigation', { name: '音频工具导航' })
+  for (const [path, name] of [['audio-convert', '转换与压缩'], ['audio-split', '剪辑与声道'], ['audio-subtract', '音频相减'], ['audio-midi', '频谱与 MIDI']]) {
+    await nav.getByRole('link', { name: new RegExp(name) }).click()
+    await expect(page).toHaveURL(new RegExp(`/${path}$`))
+    await expect(nav.locator('[aria-current="page"]')).toContainText(name)
+    await fits(page)
+    await page.screenshot({ path: info.outputPath(`${path}-empty.png`), fullPage: true })
+  }
+  await page.getByRole('button', { name: '切换为深色主题' }).click()
+  await fits(page)
+  await page.screenshot({ path: info.outputPath('audio-midi-dark-empty.png'), fullPage: true, animations: 'disabled' })
+  await page.setViewportSize({ width: 820, height: 1180 })
+  await fits(page)
+  expect(core).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('filtered batches retain all files, accept typed bitrate and play only one preview at a time', async ({ page, isMobile }, info) => {
+  test.setTimeout(60_000)
+  if (isMobile) await page.setViewportSize({ width: 390, height: 844 })
+  const uploads: string[] = []
+  page.on('request', request => { if (!['GET', 'HEAD'].includes(request.method())) uploads.push(request.url()) })
+  await page.goto('/audio-convert')
+  await page.getByLabel('选择音频文件', { exact: true }).setInputFiles(['one.wav', 'two.wav'].map(name => ({ name, mimeType: 'audio/wav', buffer: wav() })))
+  await expect(page.getByText('等待转换', { exact: true })).toHaveCount(2)
+  await page.getByRole('button', { name: '自定义码率', exact: true }).click()
+  const bitrate = page.getByLabel('码率数值', { exact: true })
+  await bitrate.fill(''); await bitrate.type('224'); await bitrate.press('Tab')
+  await expect(bitrate).toHaveValue('224')
+  await page.getByLabel('搜索音频文件').fill('ONE')
+  await expect(page.getByRole('button', { name: '移除 two.wav' })).toHaveCount(0)
+  await page.getByRole('button', { name: '开始转换（2）' }).click()
+  await expect(page.getByText('2 个音频转换完成', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await page.getByLabel('搜索音频文件').fill('')
+  await page.getByLabel('筛选音频状态').selectOption('error')
+  await expect(page.getByText('没有匹配的音频。筛选不会改变处理队列或下载结果。')).toBeVisible()
+  await page.getByLabel('筛选音频状态').selectOption('done')
+  const first = page.getByLabel('one.wav 原音频试听', { exact: true })
+  const second = page.getByLabel('two.wav 结果试听', { exact: true })
+  await first.evaluate((node: HTMLAudioElement) => node.play())
+  await expect.poll(() => first.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false)
+  await second.evaluate((node: HTMLAudioElement) => node.play())
+  await expect.poll(() => first.evaluate((node: HTMLAudioElement) => node.paused)).toBe(true)
+  await expect.poll(() => second.evaluate((node: HTMLAudioElement) => node.paused)).toBe(false)
+  await second.evaluate((node: HTMLAudioElement) => node.pause())
+  await fits(page)
+  if (isMobile) {
+    const settings = await page.getByRole('complementary', { name: '音频转换设置' }).boundingBox()
+    const search = await page.getByLabel('搜索音频文件').boundingBox()
+    const row = await page.locator('article').filter({ has: page.getByRole('button', { name: '移除 one.wav' }) }).boundingBox()
+    expect(search!.y).toBeGreaterThan(settings!.y + settings!.height)
+    expect(search!.y).toBeLessThan(row!.y)
+  }
+  await page.getByRole('heading', { name: '音频格式转换', exact: true }).click()
+  await page.screenshot({ path: info.outputPath('audio-convert-complete.png'), fullPage: true })
+  await page.getByRole('button', { name: '清空', exact: true }).click()
+  await expect(page.locator('main audio')).toHaveCount(0)
+  expect(uploads).toEqual([])
+})
+
+test('spectrum playback follows time without redrawing the background and clears all editing resources', async ({ page, isMobile }, info) => {
+  if (isMobile) await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/audio-midi')
+  await page.getByLabel('选择频谱音频文件').setInputFiles({ name: 'spectrum.wav', mimeType: 'audio/wav', buffer: wav(20) })
+  await expect(page.getByRole('status')).toContainText('频谱已就绪')
+  await page.getByLabel('时间轴缩放').selectOption('400')
+  await page.getByLabel('频谱试听音量').focus()
+  await page.getByLabel('频谱试听音量').press('Home')
+  await expect(page.getByLabel('频谱试听音量')).toHaveValue('0')
+  await page.getByLabel('频谱播放位置').evaluate((input: HTMLInputElement) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '12')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const canvas = page.getByRole('application', { name: '频谱 MIDI 编辑区' })
+  await page.getByRole('button', { name: '开始试听', exact: true }).click()
+  await expect.poll(() => canvas.evaluate(element => element.parentElement!.parentElement!.scrollLeft)).toBeGreaterThan(0)
+  await page.getByRole('button', { name: '暂停试听', exact: true }).click()
+  await page.getByLabel('跟随播放').uncheck()
+  const background = await canvas.evaluate((element: HTMLCanvasElement) => element.toDataURL())
+  const position = await page.getByLabel('频谱播放位置').inputValue()
+  await page.getByRole('button', { name: '开始试听', exact: true }).click()
+  await expect.poll(() => page.getByLabel('频谱播放位置').inputValue()).not.toBe(position)
+  expect(await canvas.evaluate((element: HTMLCanvasElement) => element.toDataURL())).toBe(background)
+  await page.getByRole('button', { name: '暂停试听', exact: true }).click()
+  await fits(page)
+  await page.screenshot({ path: info.outputPath('audio-midi-playback.png'), fullPage: true })
+  await page.getByRole('button', { name: '添加音符', exact: true }).click()
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: '清空音频', exact: true }).click()
+  await expect(canvas).toHaveCount(0)
+  await expect(page.getByRole('status')).toContainText('已释放本机处理资源')
+})

@@ -70,6 +70,27 @@ describe('AudioSplitPage', () => {
     await screen.findByText('tone.wav')
   }
 
+  it('stops pending waveform analysis, ignores its late result and allows selecting the same source again', async () => {
+    const user = userEvent.setup()
+    let finish!: (value: { duration: number; peaks: number[] }) => void
+    const analyzer = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      .mockResolvedValue({ duration: 10, peaks: [], notice: '为控制内存，已跳过绘图。' })
+    const engine = testEngine()
+    render(<BrowserRouter><ThemeProvider><AudioSplitPage analyzeAudio={analyzer} engineFactory={async () => engine} /></ThemeProvider></BrowserRouter>)
+    const input = screen.getByLabelText('选择要处理的音频或视频文件')
+    fireEvent.change(input, { target: { files: [wavFile()] } })
+    await waitFor(() => expect(analyzer).toHaveBeenCalledOnce())
+    await user.click(screen.getByRole('button', { name: '停止读取' }))
+    expect(analyzer.mock.calls[0][3].aborted).toBe(true)
+    await act(async () => finish({ duration: 10, peaks: [1] }))
+    expect(screen.queryByLabelText('原音频试听')).not.toBeInTheDocument()
+    fireEvent.change(input, { target: { files: [wavFile()] } })
+    expect(await screen.findByLabelText('原音频试听')).toBeVisible()
+    expect(screen.getByRole('note')).toHaveTextContent('已跳过绘图')
+    expect(engine.probe).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '导出所选片段' })).toBeEnabled()
+  })
+
   it('exports two independent channel files and releases their URLs when settings change', async () => {
     const user = userEvent.setup()
     const engine = testEngine()

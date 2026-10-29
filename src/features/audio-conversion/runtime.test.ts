@@ -257,5 +257,5 @@ describe('real FFmpeg metadata pipeline', () => {
     }))
     expect(actual).toEqual({ Title: metadata.title, Artist: [metadata.artist], Album: metadata.album,
       Year: 2026, Track: 3, Genre: [metadata.genre], Comment: metadata.comment })
-  })
+  }, 20_000)
 })

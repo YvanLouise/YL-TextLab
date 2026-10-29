@@ -1,7 +1,5 @@
-import coreURL from '@ffmpeg/core?url'
-import wasmURL from '@ffmpeg/core/wasm?url'
-import { FFmpeg, type FFFSType } from '@ffmpeg/ffmpeg'
 import { fetchFile } from '@ffmpeg/util'
+import { LocalAudioEngine, boundedAudioCommand, mountAudioFile, readAudioOutput, safeDelete } from '../audio-shared/engine'
 import { hasMetadataEdits, readFfmetadata, verifyMetadata } from './metadata'
 import { readWavFileMetadata, readWavMetadata, rewriteWavMetadata } from './wav-metadata'
 import { buildPcmHashCommand, inspectLosslessAudio, inspectLosslessFile, LOSSLESS_INPUT_NOTICE, supportsLosslessInput, verifyLosslessAudio } from './lossless'
@@ -11,6 +9,7 @@ import {
   outputFileName,
   outputMime,
   supportsCoverArt,
+  validateAudioOptions,
 } from './audio'
 import {
   AudioConversionError,
@@ -25,48 +24,21 @@ function virtualName(prefix: string, fileName: string) {
   return `${prefix}-${crypto.randomUUID?.() ?? Date.now()}.${extension}`
 }
 
-async function safeDelete(ffmpeg: FFmpeg, path: string) {
-  try {
-    await ffmpeg.deleteFile(path)
-  } catch {
-    // The worker may have been terminated while cleaning up.
-  }
-}
-
-export class FfmpegAudioEngine implements AudioConversionEngine {
-  private ffmpeg: FFmpeg | null = null
-  private loadingPromise: Promise<void> | null = null
-
-  async load() {
-    if (this.ffmpeg?.loaded) return
-    if (this.loadingPromise) return this.loadingPromise
-    const loading = (async () => {
-      if (!('WebAssembly' in globalThis) || !('Worker' in globalThis)) {
-        throw new AudioConversionError('ENGINE_UNAVAILABLE', '当前浏览器不支持本地音频转换所需的 WebAssembly 或 Worker。')
-      }
-      const ffmpeg = new FFmpeg()
-      this.ffmpeg = ffmpeg
-      try {
-        await ffmpeg.load({ coreURL, wasmURL })
-        if (this.ffmpeg !== ffmpeg) throw new Error('Cancelled')
-      } catch (error) {
-        if (this.ffmpeg === ffmpeg) this.ffmpeg = null
-        ffmpeg.terminate()
-        throw error
-      }
-    })()
-    this.loadingPromise = loading
-    try {
-      await loading
-    } finally {
-      if (this.loadingPromise === loading) this.loadingPromise = null
-    }
-  }
-
+export class FfmpegAudioEngine extends LocalAudioEngine implements AudioConversionEngine {
   async convert(
     request: AudioConversionRequest,
     onProgress?: (progress: number) => void,
   ): Promise<AudioConversionResult> {
+    const operation = this.beginOperation()
+    try { return await this.convertFile(request, onProgress, operation.check) } finally { operation.finish() }
+  }
+
+  private async convertFile(
+    request: AudioConversionRequest,
+    onProgress: ((progress: number) => void) | undefined,
+    check: () => void,
+  ): Promise<AudioConversionResult> {
+    validateAudioOptions(request.options)
     const lossless = request.options.mode === 'lossless'
     if (lossless && !supportsLosslessInput(request.inputFormat)) {
       throw new AudioConversionError('LOSSLESS_SOURCE_REQUIRED', LOSSLESS_INPUT_NOTICE)
@@ -78,13 +50,12 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
       throw new AudioConversionError('METADATA_UNSUPPORTED', 'AAC 原始音频流不支持可靠的歌曲标签，请选择 M4A、MP3、FLAC 或 WAV 输出。')
     }
     await this.load()
+    check()
     const ffmpeg = this.ffmpeg
     if (!ffmpeg) throw new AudioConversionError('ENGINE_UNAVAILABLE', '本地转换引擎尚未就绪。')
 
     const startedAt = performance.now()
-    let inputPath = virtualName('input', request.file.name)
-    let mountPoint: string | null = null
-    let mounted = false
+    let mounted: Awaited<ReturnType<typeof mountAudioFile>> | null = null
     const outputName = request.options.mode === 'metadata-only'
       ? metadataOutputFileName(request.file.name, outputFormat)
       : lossless
@@ -115,25 +86,15 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
       let metadata = request.metadata
       if (lossless) {
         losslessInfo = await inspectLosslessFile(request.file, request.inputFormat)
-        if (request.inputFormat === 'wav' && request.options.preserveMetadata) {
-          const original = await readWavFileMetadata(request.file)
-          metadata = { ...original, ...Object.fromEntries(Object.entries(metadata).filter(([, value]) => value.trim())) }
-        }
-        if (this.ffmpeg !== ffmpeg) throw new Error('Cancelled')
-        mountPoint = `/${virtualName('source', 'mount')}`
-        await ffmpeg.createDir(mountPoint)
-        mounted = await ffmpeg.mount('WORKERFS' as FFFSType, { blobs: [{ name: `audio.${request.inputFormat}`, data: request.file }] }, mountPoint)
-        if (!mounted) throw new AudioConversionError('ENGINE_UNAVAILABLE', '当前音频引擎无法按需读取源文件，请刷新页面后重试。')
-        inputPath = `${mountPoint}/audio.${request.inputFormat}`
-      } else {
-        let input = await fetchFile(request.file)
-        if (request.inputFormat === 'wav' && request.options.preserveMetadata
-          && String.fromCharCode(...input.subarray(0, 4)) === 'RIFF') {
-          // Normalize legacy INFO text before FFmpeg, which assumes UTF-8 metadata.
-          input = rewriteWavMetadata(input, {}, 'utf-8', true)
-        }
-        await ffmpeg.writeFile(inputPath, input)
       }
+      if (request.inputFormat === 'wav' && request.options.preserveMetadata) {
+        // Read only tag chunks. Override legacy INFO encoding without copying the entire PCM file.
+        const original = await readWavFileMetadata(request.file)
+        metadata = { ...original, ...Object.fromEntries(Object.entries(metadata).filter(([, value]) => value.trim())) }
+      }
+      check()
+      mounted = await mountAudioFile(ffmpeg, request.file, check)
+      const inputPath = mounted.path
       const hashAudio = async (path: string, hashPath: string) => {
         const code = await ffmpeg.exec(buildPcmHashCommand(path, hashPath))
         if (code !== 0) throw new AudioConversionError('LOSSLESS_VERIFY_FAILED', '无法完整解码音频进行无损校验，请检查原文件是否损坏。')
@@ -147,7 +108,7 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
       } else if (request.coverFile) {
         warnings.push(`${outputFormat.toUpperCase()} 暂不支持内嵌封面，本次未写入封面。`)
       }
-      const encode = (includeCover: boolean) => ffmpeg.exec([
+      const encode = (includeCover: boolean) => ffmpeg.exec(boundedAudioCommand([
         ...buildAudioCommand(inputPath, outputPath, request.options, {
           metadata,
           coverPath: canEmbedCover ? coverPath : null,
@@ -157,7 +118,8 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
         }),
         // Two output streams share the source decoder, including its full-precision PCM.
         ...(lossless ? buildPcmHashCommand(inputPath, sourceHashPath).slice(3) : []),
-      ])
+      ], [outputPath]))
+      check()
       let exitCode = await encode(canEmbedCover)
       if (exitCode !== 0 && supportsCoverArt(outputFormat)) {
         await safeDelete(ffmpeg, outputPath)
@@ -168,10 +130,7 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
       if (exitCode !== 0) {
         throw new AudioConversionError('TRANSCODE_FAILED', '转码器无法处理此文件或当前参数组合。')
       }
-      let data = await ffmpeg.readFile(outputPath)
-      if (typeof data === 'string' || !data.length) {
-        throw new AudioConversionError('INVALID_OUTPUT', '转码器未生成有效的音频文件。')
-      }
+      let data = await readAudioOutput(ffmpeg, outputPath)
       if (losslessInfo) {
         const outputInfo = inspectLosslessAudio(data, 'flac')
         progressStart = 70
@@ -194,7 +153,7 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
         warnings.push('输出体积未减小，已保留原 FLAC 内容，不增加文件大小。')
       }
       if (outputFormat === 'wav') {
-        data = rewriteWavMetadata(data, request.metadata, request.options.wavMetadataEncoding ?? 'gbk')
+        data = rewriteWavMetadata(data, metadata, request.options.wavMetadataEncoding ?? 'gbk')
         verifyMetadata(request.metadata, readWavMetadata(data))
         if (request.options.wavMetadataEncoding === 'utf-8') {
           warnings.push('WAV 标签已按 UTF-8 写入并校验；Windows 属性页可能显示乱码，简体中文 Windows 建议选择 GBK。')
@@ -224,26 +183,15 @@ export class FfmpegAudioEngine implements AudioConversionEngine {
     } finally {
       ffmpeg.off('progress', progressHandler)
       await Promise.all([
-        ...(!mountPoint ? [safeDelete(ffmpeg, inputPath)] : []),
         safeDelete(ffmpeg, outputPath),
         safeDelete(ffmpeg, probePath),
         ...(lossless ? [safeDelete(ffmpeg, sourceHashPath), safeDelete(ffmpeg, outputHashPath)] : []),
         ...(coverPath ? [safeDelete(ffmpeg, coverPath)] : []),
       ])
-      if (mounted && mountPoint) await ffmpeg.unmount(mountPoint).catch(() => undefined)
-      if (mountPoint) await ffmpeg.deleteDir(mountPoint).catch(() => undefined)
+      await mounted?.release()
     }
   }
 
-  cancel() {
-    this.ffmpeg?.terminate()
-    this.ffmpeg = null
-    this.loadingPromise = null
-  }
-
-  dispose() {
-    this.cancel()
-  }
 }
 
 export function createFfmpegAudioEngine() {
